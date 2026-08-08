@@ -1,0 +1,106 @@
+{
+  "info": {
+    "name": "Task Queue System API",
+    "description": "Postman API Collection for testing the Production-Grade Task Processing System.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Prometheus Metrics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/metrics",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["metrics"]
+        }
+      }
+    },
+    {
+      "name": "Dispatch Email Job",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"alice@example.com\",\n  \"subject\": "System Alert\",\n  \"body\": \"Your task processing engine is online.\",\n  \"idempotencyKey\": \"email_postman_001\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/jobs/email",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "jobs", "email"]
+        }
+      }
+    },
+    {
+      "name": "Dispatch Report Job",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reportType\": \"FINANCIAL\",\n  \"userEmail\": \"finance@company.com\",\n  \"filters\": { \"quarter\": \"Q4\", \"year\": 2026 },\n  \"idempotencyKey\": \"report_postman_001\",\n  \"simulateFailure\": false\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/jobs/report",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "jobs", "report"]
+        }
+      }
+    },
+    {
+      "name": "Dispatch Report Failure (DLQ Test)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reportType\": \"ANALYTICS\",\n  \"userEmail\": \"admin@company.com\",\n  \"filters\": { \"debug\": true },\n  \"idempotencyKey\": \"report_fail_001\",\n  \"simulateFailure\": true\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/jobs/report",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "jobs", "report"]
+        }
+      }
+    }
+  ]
+}

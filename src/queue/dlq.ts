@@ -1,11 +1,11 @@
 import { Queue, Job } from 'bullmq';
-import { getRedisConnection } from '../config/redis.connection.js';
+import { getRedisOptions } from '../config/redis.connection.js';
 import { logger } from '../logging/logger.js';
 
 export const DLQ_QUEUE_NAME = 'dlq-task-queue';
 
 export const dlqQueue = new Queue(DLQ_QUEUE_NAME, {
-  connection: getRedisConnection(),
+  connection: getRedisOptions(),
   defaultJobOptions: {
     removeOnComplete: false,
     removeOnFail: false,

@@ -1,6 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import { TASK_QUEUE_NAME } from '../queue/queue.js';
-import { getRedisConnection } from '../config/redis.connection.js';
+import { getRedisOptions } from '../config/redis.connection.js';
 import { config } from '../config/environment.js';
 import { logger } from '../logging/logger.js';
 import { getProcessorForJob } from '../processors/registry.js';
@@ -22,7 +22,7 @@ export function initializeTaskWorker(): Worker {
       return await processor(job);
     },
     {
-      connection: getRedisConnection(),
+      connection: getRedisOptions(),
       concurrency: config.WORKER_CONCURRENCY,
       limiter: {
         max: config.RATE_LIMIT_MAX,
@@ -71,6 +71,12 @@ export function initializeTaskWorker(): Worker {
   });
 
   taskWorkerInstance.on('error', (err: Error) => {
+    // Suppress expected idle socket reset logs from serverless Upstash Redis
+    const msg = err.message || '';
+    if (msg.includes('ECONNRESET') || msg.includes('EPIPE') || msg.includes('Connection is closed')) {
+      logger.debug({ errMsg: msg }, 'Worker socket auto-reconnected');
+      return;
+    }
     logger.error({ err }, 'Worker system error encountered');
   });
 

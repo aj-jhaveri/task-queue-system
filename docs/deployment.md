@@ -19,6 +19,7 @@ cp .env.example .env
 | `NODE_ENV` | `development` | Yes | Environment mode (`development`, `production`, `test`) |
 | `PORT` | `3000` | Yes | Port for Express HTTP server, Bull Board, and `/metrics` |
 | `LOG_LEVEL` | `info` | No | Pino logging verbosity (`trace`, `debug`, `info`, `warn`, `error`) |
+| `REDIS_URL` | *Empty* | No | Redis connection URL (`rediss://default:...@host:6379`) for cloud hosting |
 | `REDIS_HOST` | `localhost` | Yes | Redis server hostname or container service name |
 | `REDIS_PORT` | `6379` | Yes | Redis server port |
 | `REDIS_PASSWORD` | *Empty* | No | Redis authentication password (recommended for production) |
@@ -79,6 +80,25 @@ npm run build
 # 4. Start production server
 npm start
 ```
+
+---
+
+## Health & Monitoring Endpoints
+
+* **Health Check:** `GET http://localhost:3000/health` (Returns status of Express, Redis, and SQLite)
+* **Bull Board Dashboard:** `http://localhost:3000/admin/queues` (Queue administration UI)
+* **Grafana Visual Dashboard:** `http://localhost:3001` (*Login: `admin` / `admin`*)
+* **Prometheus Metrics Scraper:** `GET http://localhost:3000/metrics` (or Prometheus UI at `http://localhost:9090`)
+
+---
+
+## Containerized Monitoring Services
+
+The `docker-compose.yml` includes 3 fully integrated containers:
+
+1. **`task_queue_redis`** (`redis:7-alpine`, port `6379`): Redis persistence datastore.
+2. **`task_queue_prometheus`** (`prom/prometheus:v2.50.0`, port `9090`): Time-series metrics scraper.
+3. **`task_queue_grafana`** (`grafana/grafana:10.3.3`, port `3001`): Auto-provisioned Grafana visualization dashboard.
 
 ---
 

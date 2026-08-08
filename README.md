@@ -83,9 +83,18 @@ BullMQ Queue ──► Redis Store
 
 ---
 
-## Visual Previews & Output
+## Visual Previews & Observability
 
-### 1. Bull Board Dashboard (`/admin/queues`)
+### 1. Grafana Dashboard (`http://localhost:3001`)
+Pre-configured, auto-provisioned Grafana dashboard (*Login: `admin` / `admin`*):
+
+![Task Queue System Grafana Dashboard](docs/images/grafana_dashboard.png)
+
+* **Live Queue Depth**: Active, waiting, completed, and failed job counts over time.
+* **Processing Latency**: Real-time histograms for job execution durations.
+* **System Metrics**: Node.js event loop lag and RAM memory usage.
+
+### 2. Bull Board Dashboard (`http://localhost:3000/admin/queues`)
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │ Bull Board - Queue Management                                                   │
@@ -98,7 +107,7 @@ BullMQ Queue ──► Redis Store
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Prometheus Metrics Endpoint (`/metrics`)
+### 3. Prometheus Metrics (`http://localhost:9090` / `http://localhost:3000/metrics`)
 ```text
 # HELP task_queue_jobs_processed_total Total number of task queue jobs processed
 # TYPE task_queue_jobs_processed_total counter
@@ -145,12 +154,21 @@ npm install
 npm run dev
 ```
 
-### 4. Run Tests
+### 4. Interactive Terminal CLI Tester
+In a separate terminal window, run the interactive CLI tester:
+```bash
+npm run cli
+```
+
+### 5. Run Automated Tests
 ```bash
 npm test
 ```
 
-### 5. Typecheck & Build
+### 6. Postman API Collection
+Import `task-queue-system.postman_collection.json` into **Postman** or **Bruno** to test all endpoints (`/health`, `/metrics`, `POST /api/jobs/email`, `POST /api/jobs/report`, and DLQ failure simulations) with 1 click.
+
+### 7. Typecheck & Build
 ```bash
 npm run typecheck
 npm run build

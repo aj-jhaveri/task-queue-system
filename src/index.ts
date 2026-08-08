@@ -6,7 +6,7 @@ import { ZodError } from 'zod';
 
 import { config } from './config/environment.js';
 import { logger } from './logging/logger.js';
-import { getRedisConnection, closeRedisConnection } from './config/redis.connection.js';
+import { getRedisConnection, closeRedisConnection, getNormalizedRedisUrl } from './config/redis.connection.js';
 import { taskQueue } from './queue/queue.js';
 import { dlqQueue } from './queue/dlq.js';
 import { dispatchEmailJob, dispatchReportJob } from './queue/producer.js';
@@ -15,7 +15,36 @@ import { metricsService } from './metrics/metrics.service.js';
 import { idempotencyDb } from './storage/idempotency.db.js';
 
 const app = express();
+
+// Global CORS Middleware (must be first)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  next();
+});
+
 app.use(express.json());
+
+// Root API Index & Documentation
+app.get('/', (_req: Request, res: Response) => {
+  res.json({
+    service: 'Slake Design Task Queue Microservice',
+    status: 'ONLINE',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      metrics: '/metrics',
+      adminQueues: '/admin/queues',
+      dispatchEmailJob: 'POST /api/jobs/email',
+      dispatchReportJob: 'POST /api/jobs/report'
+    }
+  });
+});
 
 // Set up Bull Board Admin UI
 const serverAdapter = new ExpressAdapter();
@@ -35,24 +64,32 @@ app.get('/health', async (_req: Request, res: Response) => {
 
   try {
     const redis = getRedisConnection();
-    const pingRes = await redis.ping();
-    if (pingRes === 'PONG') redisStatus = 'UP';
+    if (redis.status === 'ready') {
+      redisStatus = 'UP';
+    } else {
+      const pingPromise = redis.ping();
+      const timeoutPromise = new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('Redis ping timeout')), 2500)
+      );
+      const pingRes = await Promise.race([pingPromise, timeoutPromise]);
+      if (pingRes === 'PONG') redisStatus = 'UP';
+    }
   } catch (err) {
-    logger.error({ err }, 'Health check Redis ping failed');
+    logger.warn({ err: err instanceof Error ? err.message : err }, 'Redis health check ping failed');
   }
 
   try {
     idempotencyDb.getRecord('health_check_ping');
     dbStatus = 'UP';
   } catch (err) {
-    logger.error({ err }, 'Health check SQLite query failed');
+    logger.error({ err: err instanceof Error ? err.message : err }, 'Health check SQLite query failed');
   }
 
   const isHealthy = redisStatus === 'UP' && dbStatus === 'UP';
-  const status = isHealthy ? 200 : 503;
+  const statusCode = isHealthy ? 200 : 503;
 
-  res.status(status).json({
-    status: isHealthy ? 'HEALTHY' : 'UNHEALTHY',
+  res.status(statusCode).json({
+    status: isHealthy ? 'HEALTHY' : 'DEGRADED',
     timestamp: new Date().toISOString(),
     services: {
       redis: redisStatus,

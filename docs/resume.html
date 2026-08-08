@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anish Jhaveri - Resume</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    @page {
+      size: letter;
+      margin: 0.5in 0.6in;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: #1e293b;
+      background-color: #ffffff;
+      line-height: 1.42;
+      padding: 2rem 1rem;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .resume-paper {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 2rem 2.25rem;
+    }
+
+    /* HEADER */
+    header {
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 0.85rem;
+      margin-bottom: 1.15rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .name-title h1 {
+      font-size: 2.1rem;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    .name-title .title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #0284c7;
+      margin-top: 0.25rem;
+    }
+
+    .contact-details {
+      text-align: right;
+      font-size: 0.825rem;
+      color: #475569;
+      font-weight: 500;
+      line-height: 1.35;
+    }
+
+    .contact-details a {
+      color: #0f172a;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .contact-details a:hover {
+      color: #0284c7;
+    }
+
+    /* SECTIONS */
+    section {
+      margin-bottom: 1.15rem;
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #0f172a;
+      border-bottom: 1.5px solid #cbd5e1;
+      padding-bottom: 0.2rem;
+      margin-bottom: 0.65rem;
+    }
+
+    p.summary {
+      font-size: 0.875rem;
+      color: #334155;
+      line-height: 1.45;
+    }
+
+    /* SKILLS TABLE */
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.5rem 1.25rem;
+      font-size: 0.85rem;
+    }
+
+    .skill-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .skill-label {
+      font-weight: 700;
+      color: #0f172a;
+      min-width: 140px;
+      flex-shrink: 0;
+    }
+
+    .skill-val {
+      color: #334155;
+    }
+
+    /* ENTRY CARDS */
+    .entry {
+      margin-bottom: 0.85rem;
+    }
+
+    .entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.15rem;
+    }
+
+    .entry-name {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .entry-tech {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.73rem;
+      color: #0284c7;
+      font-weight: 500;
+      margin-left: 0.35rem;
+    }
+
+    .entry-meta {
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    .entry-meta a {
+      color: #475569;
+      text-decoration: none;
+    }
+
+    ul.bullets {
+      list-style-type: disc;
+      padding-left: 1.15rem;
+    }
+
+    ul.bullets li {
+      font-size: 0.85rem;
+      color: #334155;
+      margin-bottom: 0.25rem;
+      line-height: 1.4;
+    }
+
+    ul.bullets li strong {
+      color: #0f172a;
+    }
+
+    .edu-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.875rem;
+    }
+
+    @media print {
+      body {
+        background: none;
+        padding: 0;
+      }
+      .resume-paper {
+        box-shadow: none;
+        padding: 0;
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="resume-paper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="name-title">
+      <h1>Anish Jhaveri</h1>
+      <div class="title">Full-Stack Engineer</div>
+    </div>
+    <div class="contact-details">
+      Austin, TX &bull; (817) 371-0013 &bull; <a href="mailto:aj.jhaveri@gmail.com">aj.jhaveri@gmail.com</a><br>
+      <a href="https://github.com/aj-jhaveri">github.com/aj-jhaveri</a> &bull; <a href="https://www.linkedin.com/in/anishjhaveri360">linkedin.com/in/anishjhaveri360</a>
+    </div>
+  </header>
+
+  <!-- SUMMARY -->
+  <section>
+    <h2 class="section-title">Professional Summary</h2>
+    <p class="summary">
+      Full-Stack Developer building web applications, backend APIs, database systems, and AI-assisted software workflows. Background combining a Master of Accounting with hands-on software development using Node.js, TypeScript, PostgreSQL, Redis, and React. Skilled at building modern web tools, task queue infrastructure, and retrieval-augmented generation (RAG) search applications.
+    </p>
+  </section>
+
+  <!-- SKILLS -->
+  <section>
+    <h2 class="section-title">Technical Skills</h2>
+    <div class="skills-grid">
+      <div class="skill-row">
+        <span class="skill-label">Languages & Core:</span>
+        <span class="skill-val">JavaScript (ES6+), TypeScript, Node.js, SQL</span>
+      </div>
+      <div class="skill-row">
+        <span class="skill-label">Backend Systems:</span>
+        <span class="skill-val">Express, NestJS, BullMQ, Redis, Zod, REST APIs</span>
+      </div>
+      <div class="skill-row">
+        <span class="skill-label">Databases & AI Tools:</span>
+        <span class="skill-val">PostgreSQL, Supabase (pgvector), SQLite, MySQL, RAG, MCP</span>
+      </div>
+      <div class="skill-row">
+        <span class="skill-label">DevOps & Testing:</span>
+        <span class="skill-val">Docker, GitHub Actions, Prometheus, Grafana, Pino, Vitest</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURED PROJECTS -->
+  <section>
+    <h2 class="section-title">Featured Software Projects</h2>
+
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-name">Task Processing Engine <span class="entry-tech">[TypeScript • BullMQ • Redis • SQLite • Grafana]</span></span>
+        <span class="entry-meta"><a href="https://github.com/aj-jhaveri/task-queue-system">github.com/aj-jhaveri/task-queue-system</a></span>
+      </div>
+      <ul class="bullets">
+        <li>Built a background task processing queue in TypeScript using BullMQ and Redis with worker concurrency and rate limiting.</li>
+        <li>Implemented primary database idempotency checks in SQLite to prevent duplicate job execution during retries.</li>
+        <li>Configured Prometheus metrics and Grafana monitoring dashboards to track queue depth and Node.js event loop health.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-name">Slake Design RAG Search Engine <span class="entry-tech">[Node.js • Express • Supabase pgvector • Gemini API]</span></span>
+        <span class="entry-meta"><a href="https://github.com/Slake-Design/slakedesign-rag">slakedesign.com/demo</a></span>
+      </div>
+      <ul class="bullets">
+        <li>Built a RAG search backend utilizing PostgreSQL pgvector, Gemini embeddings, and context-window token management.</li>
+        <li>Implemented token-aware context management using Gemini's countTokens API to keep prompts structured under 3,000 tokens.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-name">Type-Safe MCP SQLite Bridge <span class="entry-tech">[TypeScript • Model Context Protocol • SQLite • Zod]</span></span>
+        <span class="entry-meta"><a href="https://github.com/aj-jhaveri/mcp-sqlite-bridge">github.com/aj-jhaveri/mcp-sqlite-bridge</a></span>
+      </div>
+      <ul class="bullets">
+        <li>Developed a Model Context Protocol (MCP) server enabling LLM agents to securely interact with SQLite databases.</li>
+        <li>Configured Zod validation middleware to format schema errors for LLM client input correction.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- PROFESSIONAL EXPERIENCE -->
+  <section>
+    <h2 class="section-title">Work Experience</h2>
+
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-name">SCOUTLOCAL &ndash; Full-Stack Engineer (Contract)</span>
+        <span class="entry-meta">Austin, TX | July 2025 – Dec 2025</span>
+      </div>
+      <ul class="bullets">
+        <li><strong>Latency Optimization:</strong> Reduced authentication middleware latency from 300ms to &lt;1ms by replacing repeated JWKS network lookups with local public-key verification caching.</li>
+        <li><strong>API Cost Reduction:</strong> Restructured Mapbox GL viewport integrations with debouncing and caching layers, cutting geographic API query costs by 80%.</li>
+        <li><strong>Testing & CI/CD:</strong> Built unit, integration, and E2E testing suites (Vitest, Jest, Supertest, Playwright) integrated into automated GitHub Actions CI pipelines.</li>
+        <li><strong>Database Integrity:</strong> Restructured Prisma ORM database operations into atomic transactions to prevent orphaned records.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-name">AW TECHNOLOGIES LLC (dba Slake Design) &ndash; Software Engineer & Consultant</span>
+        <span class="entry-meta">Austin, TX | 2013 – Present</span>
+      </div>
+      <ul class="bullets">
+        <li><strong>Backend Systems:</strong> Developed custom Node.js and Express REST APIs, managed PostgreSQL and MySQL databases, and automated background data processing workflows.</li>
+        <li><strong>AI & RAG Applications:</strong> Built and deployed RAG search engines using PostgreSQL pgvector and Gemini embeddings.</li>
+        <li><strong>E-Commerce & Payments:</strong> Integrated payment gateways (Stripe, Authorize.Net, PayPal) and subscription checkout flows.</li>
+        <li><strong>DevOps & VPS Administration:</strong> Managed Linux VPS hosting environments using Nginx and Apache; configured DNS routing, SSL certificates, and Docker deployments.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- EARLY CAREER -->
+  <section>
+    <h2 class="section-title">Early Career & Compliance Background</h2>
+    <p class="summary" style="font-size: 0.825rem; color: #475569;">
+      <strong>Financial Analysis, Reporting & Compliance (2004 – 2012):</strong> Professional experience across public accounting firms, public corporations, financial institutions, and private enterprises:
+    </p>
+    <ul class="bullets" style="font-size: 0.825rem; color: #475569; margin-top: 0.3rem;">
+      <li><strong>National Financial Partners:</strong> Internal Controls Analyst &ndash; FINRA/SOX process reviews, flowcharts, and control documentation.</li>
+      <li><strong>Vignette (OpenText):</strong> Financial Reporting Accountant &ndash; SEC Forms 10-Q & 8-K filings, financial statements, FAS 123R, and 401(k) plan audit.</li>
+      <li><strong>KPMG LLP:</strong> Assurance Associate &ndash; Financial statement audits for hedge funds, private equity funds, and Form 6-K quarterly reviews.</li>
+      <li><strong>Corporate & CPA Contracts:</strong> Financial analysis, tax return preparation (1120, 1120S, 1065), and retail finance automation at <strong>Apple</strong>, <strong>OneWest Bank</strong>, <strong>Realtex Development</strong>, <strong>XTO Energy</strong>, and <strong>Scalco & Johnson CPAs</strong>.</li>
+    </ul>
+  </section>
+
+  <!-- EDUCATION -->
+  <section>
+    <h2 class="section-title">Education</h2>
+    <div class="edu-row">
+      <span style="font-weight: 800; color: #0f172a;">TEXAS CHRISTIAN UNIVERSITY — Fort Worth, TX</span>
+      <span style="color: #64748b; font-weight: 500;">Master of Accounting &bull; B.B.A. in Finance & Accounting</span>
+    </div>
+  </section>
+
+</div>
+
+</body>
+</html>
