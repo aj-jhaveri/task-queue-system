@@ -1,12 +1,16 @@
 # Production-Grade Task Processing System
 
-Asynchronous background task processing engine built with **Node.js**, **TypeScript**, **BullMQ**, **Redis**, **Express**, **Pino**, **Zod**, and **SQLite**.
+**Live demo:** [slakedesign.com/demo/queue](https://slakedesign.com/demo/queue) · **Bull Board:** [slake-task-queue.onrender.com/admin/queues](https://slake-task-queue.onrender.com/admin/queues)
+
+Asynchronous background task processing microservice built with **Node.js**, **TypeScript**, **BullMQ**, **Redis**, **Express**, **Pino**, **Zod**, and **SQLite** — deployed on **Render** with **Upstash Cloud Redis**.
 
 ---
 
 ## What It Is
 
-A production-grade microservice template demonstrating robust background job queues, rate limiting, concurrency management, dead-letter queue (DLQ) routing, primary datastore idempotency, Prometheus metrics, and real-time dashboard observability.
+A production-grade microservice demonstrating robust background job queues, rate limiting, concurrency management, dead-letter queue (DLQ) routing, SQLite idempotency, Prometheus metrics, and real-time Bull Board observability.
+
+**Production deployment:** The system runs continuously on Render with Upstash Cloud Redis (TLS, IPv4). UptimeRobot pings `/health` every 5 minutes — no cold starts. Dispatch real jobs at [slakedesign.com/demo/queue](https://slakedesign.com/demo/queue).
 
 ## Why It Exists
 
@@ -19,19 +23,18 @@ Distributed backend systems require reliable execution of asynchronous side-effe
 
 ## What This Project Demonstrates
 
-This project showcases production backend engineering practices including:
-
 * **Asynchronous background processing**
-* **Durable idempotency**
-* **Runtime validation**
-* **Worker concurrency**
+* **Durable idempotency** (SQLite deduplication store)
+* **Runtime validation** (Zod schemas on all input boundaries)
+* **Worker concurrency** (5 concurrent workers, 100 jobs/min rate limit)
 * **Retry and exponential backoff**
 * **Dead-letter queue handling**
-* **Structured logging**
-* **Operational metrics**
-* **Health monitoring**
-* **CI/CD automation**
-* **Automated testing**
+* **Structured logging** (Pino JSON)
+* **Operational metrics** (Prometheus `/metrics`)
+* **Health monitoring** (`/health` with Redis + SQLite status)
+* **CI/CD automation** (GitHub Actions)
+* **Automated testing** (Vitest)
+* **Cloud Redis deployment** (Upstash + ioredis TLS, IPv4-forced for Node 24)
 
 ---
 
@@ -40,13 +43,13 @@ This project showcases production backend engineering practices including:
 ```text
 Client
   │
-  │  POST /api/jobs/report
+  │  POST /api/jobs/email  (or /api/jobs/report)
   ▼
 Express API (Zod Validation)
   │
-  │  dispatchReportJob()
+  │  dispatchEmailJob() / dispatchReportJob()
   ▼
-BullMQ Queue ──► Redis Store
+BullMQ Queue ──► Upstash Cloud Redis (rediss://, TLS)
                    │
                    ▼
                Task Worker (Concurrency: 5, Rate Limit: 100/min)
@@ -68,7 +71,10 @@ BullMQ Queue ──► Redis Store
 ### BullMQ + Redis vs. RabbitMQ / Kafka
 * **Selected BullMQ** for native TypeScript typing, non-blocking Node.js integration, built-in rate-limiting, exponential retries, and zero-overhead local Docker development.
 
-### SQLite as Primary Datastore Stand-In
+### Upstash Cloud Redis vs. Self-Hosted
+* **Upstash** provides a serverless Redis with REST and TCP endpoints, free tier, and global availability — ideal for a portfolio deployment that stays warm with no ops overhead. TCP connection with ioredis requires explicit `host`/`port`/`password` parsing from the `REDIS_URL` and `family: 4` (IPv4) for Node 24 compatibility.
+
+### SQLite as Idempotency Store
 * Used **SQLite** to demonstrate durable side-effect deduplication (`idempotencyKey`) across Redis restarts without requiring a full PostgreSQL deployment.
 
 ---
@@ -76,10 +82,11 @@ BullMQ Queue ──► Redis Store
 ## Key Features
 
 * **Concurrency & Rate Limiting:** 5 concurrent worker threads per instance, worker-level rate limiting (100 jobs/min).
-* **Idempotent Side-Effects:** Primary datastore check prevents duplicate executions.
+* **Idempotent Side-Effects:** SQLite primary datastore check prevents duplicate executions.
 * **Dead Letter Queue (DLQ):** Automatic failover to `dlq-task-queue` on max retry exhaustion.
 * **Observability:** Built-in Prometheus `/metrics` endpoint and Bull Board dashboard at `/admin/queues`.
 * **Runtime Type Safety:** Strict Zod schema validation on input boundaries.
+* **Cloud Deployment:** Runs on Render with Upstash Cloud Redis. Zero cold starts via UptimeRobot keepalive.
 
 ---
 
@@ -94,20 +101,24 @@ Pre-configured, auto-provisioned Grafana dashboard (*Login: `admin` / `admin`*):
 * **Processing Latency**: Real-time histograms for job execution durations.
 * **System Metrics**: Node.js event loop lag and RAM memory usage.
 
-### 2. Bull Board Dashboard (`http://localhost:3000/admin/queues`)
+### 2. Bull Board Dashboard
+
+**Live:** [slake-task-queue.onrender.com/admin/queues](https://slake-task-queue.onrender.com/admin/queues)
+**Local:** `http://localhost:3000/admin/queues`
+
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │ Bull Board - Queue Management                                                   │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │ Queue: task-processing-queue                                                    │
-│ [Active: 0]  [Waiting: 0]  [Completed: 142]  [Failed: 0]  [Delayed: 0]           │
+│ [Active: 0]  [Waiting: 0]  [Completed: 12]  [Failed: 0]  [Delayed: 0]          │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │ Queue: dlq-task-queue                                                           │
-│ [Active: 0]  [Waiting: 0]  [Completed: 0]    [Failed: 3]  [Delayed: 0]           │
+│ [Active: 0]  [Waiting: 0]  [Completed: 0]   [Failed: 3]  [Delayed: 0]          │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3. Prometheus Metrics (`http://localhost:9090` / `http://localhost:3000/metrics`)
+### 3. Prometheus Metrics (`http://localhost:3000/metrics`)
 ```text
 # HELP task_queue_jobs_processed_total Total number of task queue jobs processed
 # TYPE task_queue_jobs_processed_total counter
@@ -119,18 +130,18 @@ task_queue_jobs_processed_total{job_type="REPORT_GENERATION",status="success"} 5
 task_queue_processing_duration_seconds_bucket{job_type="EMAIL_NOTIFICATION",le="0.1"} 89
 ```
 
-### 3. Structured Pino Logger Output
+### 4. Structured Pino Logger Output
 ```json
 {"level":30,"time":1774569600000,"pid":1234,"env":"development","jobId":"email_key_101","idempotencyKey":"key_101","to":"user@example.com","attempt":0,"msg":"Processing Email Job"}
 {"level":30,"time":1774569600050,"pid":1234,"env":"development","jobId":"email_key_101","idempotencyKey":"key_101","durationMs":48,"messageId":"msg_1774569600_a8b9c0","msg":"Email job successfully executed"}
 ```
 
-### 4. Duplicate Job Idempotency Skip Log
+### 5. Duplicate Job Idempotency Skip Log
 ```json
 {"level":40,"time":1774569605000,"pid":1234,"env":"development","jobId":"email_key_101","idempotencyKey":"key_101","msg":"Duplicate job execution blocked by SQLite primary datastore idempotency check"}
 ```
 
-### 5. DLQ Escalation Log
+### 6. DLQ Escalation Log
 ```json
 {"level":50,"time":1774569610000,"pid":1234,"env":"development","dlqJobId":"dlq_report_key_500_1774569610","originalJobId":"report_key_500","jobName":"REPORT_GENERATION","reason":"Simulated Report Processor failure (attempt 3)","msg":"Job exhausted all retry attempts and moved to Dead Letter Queue (DLQ)"}
 ```
@@ -139,36 +150,59 @@ task_queue_processing_duration_seconds_bucket{job_type="EMAIL_NOTIFICATION",le="
 
 ## Quick Start
 
-### 1. Start Redis
+### Option A: Try the Live Demo
+
+Dispatch a real job at [slakedesign.com/demo/queue](https://slakedesign.com/demo/queue) or call the API directly:
+
+```bash
+# Dispatch an email job to the live production system
+curl -X POST https://slake-task-queue.onrender.com/api/jobs/email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "alice@example.com",
+    "subject": "System Alert",
+    "body": "Your task processing system is online.",
+    "idempotencyKey": "email_demo_001"
+  }'
+
+# Check health
+curl https://slake-task-queue.onrender.com/health
+```
+
+Then inspect the job in Bull Board: [slake-task-queue.onrender.com/admin/queues](https://slake-task-queue.onrender.com/admin/queues)
+
+### Option B: Run Locally
+
+#### 1. Start Redis
 ```bash
 docker compose up -d
 ```
 
-### 2. Install Dependencies
+#### 2. Install Dependencies
 ```bash
 npm install
 ```
 
-### 3. Run Development Server
+#### 3. Run Development Server
 ```bash
 npm run dev
 ```
 
-### 4. Interactive Terminal CLI Tester
-In a separate terminal window, run the interactive CLI tester:
+#### 4. Interactive Terminal CLI Tester
+In a separate terminal window:
 ```bash
 npm run cli
 ```
 
-### 5. Run Automated Tests
+#### 5. Run Automated Tests
 ```bash
 npm test
 ```
 
-### 6. Postman API Collection
-Import `task-queue-system.postman_collection.json` into **Postman** or **Bruno** to test all endpoints (`/health`, `/metrics`, `POST /api/jobs/email`, `POST /api/jobs/report`, and DLQ failure simulations) with 1 click.
+#### 6. Postman API Collection
+Import `task-queue-system.postman_collection.json` into **Postman** or **Bruno** to test all endpoints with 1 click.
 
-### 7. Typecheck & Build
+#### 7. Typecheck & Build
 ```bash
 npm run typecheck
 npm run build
@@ -176,11 +210,11 @@ npm run build
 
 ---
 
-## REST API Usage
+## REST API
 
 ### Dispatch Email Job
 ```bash
-curl -X POST http://localhost:3000/api/jobs/email \
+curl -X POST https://slake-task-queue.onrender.com/api/jobs/email \
   -H "Content-Type: application/json" \
   -d '{
     "to": "alice@example.com",
@@ -192,7 +226,7 @@ curl -X POST http://localhost:3000/api/jobs/email \
 
 ### Dispatch Report Job (with failure simulation)
 ```bash
-curl -X POST http://localhost:3000/api/jobs/report \
+curl -X POST https://slake-task-queue.onrender.com/api/jobs/report \
   -H "Content-Type: application/json" \
   -d '{
     "reportType": "FINANCIAL",
@@ -203,6 +237,22 @@ curl -X POST http://localhost:3000/api/jobs/report \
   }'
 ```
 
+### Health Check
+```bash
+curl https://slake-task-queue.onrender.com/health
+# → {"status":"HEALTHY","timestamp":"...","services":{"redis":"UP","sqlite":"UP","worker":"UP"}}
+```
+
+---
+
+## Environment Variables (Render / Production)
+
+| Variable | Description |
+|---|---|
+| `REDIS_URL` | Full Upstash Cloud Redis connection string (`rediss://...`) |
+| `NODE_ENV` | Set to `production` |
+| `PORT` | HTTP server port (Render sets this automatically) |
+
 ---
 
 ## Documentation Links
@@ -211,4 +261,3 @@ curl -X POST http://localhost:3000/api/jobs/report \
 * [Design Decisions & Engineering Tradeoffs (`docs/design_decisions.md`)](docs/design_decisions.md)
 * [Deployment & Operations (`docs/deployment.md`)](docs/deployment.md)
 * [Troubleshooting & DLQ Guide (`docs/troubleshooting.md`)](docs/troubleshooting.md)
-* [Implementation Plan (`docs/implementation_plan.md`)](docs/implementation_plan.md)
