@@ -6,8 +6,8 @@ export const TASK_QUEUE_NAME = 'task-processing-queue';
 export const taskQueue = new Queue(TASK_QUEUE_NAME, {
   connection: getRedisOptions(),
   defaultJobOptions: {
-    removeOnComplete: 1000,
-    removeOnFail: 5000,
+    removeOnComplete: { count: 20, age: 3600 },
+    removeOnFail: { count: 100, age: 86400 },
     attempts: 3,
     backoff: {
       type: 'exponential',
