@@ -24,10 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Read the version from .nvmrc so CI, local development, and Render's build
+      # all agree. A drift here is not cosmetic: better-sqlite3 ships prebuilt
+      # native binaries per Node major, so a version CI never exercises can fail
+      # to load at runtime on the host.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install dependencies
@@ -45,3 +49,103 @@ jobs:
 
       - name: Build Project
         run: npm run build
+
+  # Reproduces Render's deploy exactly, because the normal job cannot.
+  #
+  # This exists because a deploy failed that CI had passed. Render builds with
+  # NODE_ENV=production set, which switches npm's `omit=dev` on and strips the
+  # devDependencies that `tsc` needs for its type definitions. The job above
+  # installs with `npm ci` and no NODE_ENV, so dev dependencies are always present
+  # and the failure is structurally invisible to it.
+  #
+  # Two distinct properties are checked here, and they pull in opposite directions:
+  #   1. The BUILD needs devDependencies even under NODE_ENV=production.
+  #   2. The RUNTIME must not need them at all - the server has to start after
+  #      dev dependencies are pruned away, which is the state Render actually runs.
+  deploy-parity:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install exactly as Render does
+        run: npm ci --include=dev
+
+      - name: Build exactly as Render does
+        run: npm run build
+
+      - name: Prune dev dependencies to match the running container
+        run: npm prune --omit=dev
+
+      - name: Boot the server and verify it reports healthy
+        run: |
+          set -euo pipefail
+          node dist/index.js > server.log 2>&1 &
+          SERVER_PID=$!
+
+          for i in $(seq 1 30); do
+            if curl -sf -m 2 http://127.0.0.1:3000/health > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:3000/health || echo "000")
+          echo "--- server log ---"; cat server.log
+
+          kill "$SERVER_PID" 2>/dev/null || true
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Server did not report healthy after a production install (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "Production-parity boot succeeded."
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          PORT: 3000
+          SQLITE_DB_PATH: ./data/ci.db
+
+      - name: Verify the dashboard is public and read-only
+        run: |
+          set -euo pipefail
+          node dist/index.js > guard.log 2>&1 &
+          SERVER_PID=$!
+
+          for i in $(seq 1 30); do
+            if curl -sf -m 2 http://127.0.0.1:3000/health > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          DASH=$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:3000/admin/queues)
+          MUTATE=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -X PUT \
+            http://127.0.0.1:3000/admin/queues/api/queues/task-processing-queue/obliterate)
+
+          kill "$SERVER_PID" 2>/dev/null || true
+
+          echo "dashboard=$DASH mutation=$MUTATE"
+          [ "$DASH" = "200" ] || { echo "::error::Public dashboard did not load (HTTP $DASH)"; exit 1; }
+          [ "$MUTATE" = "405" ] || { echo "::error::Mutating route was NOT refused (HTTP $MUTATE)"; exit 1; }
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          PORT: 3000
+          SQLITE_DB_PATH: ./data/ci.db
