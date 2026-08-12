@@ -1,181 +1,55 @@
-import express, { Request, Response, NextFunction } from 'express';
-import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
-import { ExpressAdapter } from '@bull-board/express';
-import { ZodError } from 'zod';
-
-import { config } from './config/environment.js';
+import { config, assertRedisConfigValid } from './config/environment.js';
 import { logger } from './logging/logger.js';
-import { getRedisConnection, closeRedisConnection, getNormalizedRedisUrl } from './config/redis.connection.js';
+import { closeRedisConnection } from './config/redis.connection.js';
 import { taskQueue } from './queue/queue.js';
 import { dlqQueue } from './queue/dlq.js';
-import { dispatchEmailJob, dispatchReportJob } from './queue/producer.js';
 import { initializeTaskWorker, stopTaskWorker } from './workers/task.worker.js';
-import { metricsService } from './metrics/metrics.service.js';
 import { idempotencyDb } from './storage/idempotency.db.js';
+import { buildApp } from './app.js';
 
-const app = express();
+// Fail fast on a malformed Redis configuration, before any connection attempt.
+// The thrown message never contains the connection string.
+assertRedisConfigValid();
 
-// Global CORS Middleware (must be first)
-app.use((req: Request, res: Response, next: NextFunction) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-  next();
-});
+const app = buildApp();
 
-app.use(express.json());
-
-// Root API Index & Documentation
-app.get('/', (_req: Request, res: Response) => {
-  res.json({
-    service: 'Slake Design Task Queue Microservice',
-    status: 'ONLINE',
-    version: '1.0.0',
-    endpoints: {
-      health: '/health',
-      metrics: '/metrics',
-      adminQueues: '/admin/queues',
-      dispatchEmailJob: 'POST /api/jobs/email',
-      dispatchReportJob: 'POST /api/jobs/report'
-    }
-  });
-});
-
-// Set up Bull Board Admin UI
-const serverAdapter = new ExpressAdapter();
-serverAdapter.setBasePath('/admin/queues');
-
-createBullBoard({
-  queues: [new BullMQAdapter(taskQueue), new BullMQAdapter(dlqQueue)],
-  serverAdapter,
-});
-
-app.use('/admin/queues', serverAdapter.getRouter());
-
-// Health Check Endpoint
-app.get('/health', async (_req: Request, res: Response) => {
-  let redisStatus = 'DOWN';
-  let dbStatus = 'DOWN';
-
-  try {
-    const redis = getRedisConnection();
-    if (redis.status === 'ready') {
-      redisStatus = 'UP';
-    } else {
-      const pingPromise = redis.ping();
-      const timeoutPromise = new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis ping timeout')), 2500)
-      );
-      const pingRes = await Promise.race([pingPromise, timeoutPromise]);
-      if (pingRes === 'PONG') redisStatus = 'UP';
-    }
-  } catch (err) {
-    logger.warn({ err: err instanceof Error ? err.message : err }, 'Redis health check ping failed');
-  }
-
-  try {
-    idempotencyDb.getRecord('health_check_ping');
-    dbStatus = 'UP';
-  } catch (err) {
-    logger.error({ err: err instanceof Error ? err.message : err }, 'Health check SQLite query failed');
-  }
-
-  const isHealthy = redisStatus === 'UP' && dbStatus === 'UP';
-  const statusCode = isHealthy ? 200 : 503;
-
-  res.status(statusCode).json({
-    status: isHealthy ? 'HEALTHY' : 'DEGRADED',
-    timestamp: new Date().toISOString(),
-    services: {
-      redis: redisStatus,
-      sqlite: dbStatus,
-      worker: 'UP',
-    },
-  });
-});
-
-// Prometheus Metrics Endpoint
-app.get('/metrics', async (_req: Request, res: Response) => {
-  try {
-    // Update queue depth metric gauge
-    const counts = await taskQueue.getJobCounts('active', 'completed', 'failed', 'delayed', 'waiting');
-    metricsService.queueDepthGauge.set({ queue_name: taskQueue.name, state: 'active' }, counts.active);
-    metricsService.queueDepthGauge.set({ queue_name: taskQueue.name, state: 'completed' }, counts.completed);
-    metricsService.queueDepthGauge.set({ queue_name: taskQueue.name, state: 'failed' }, counts.failed);
-    metricsService.queueDepthGauge.set({ queue_name: taskQueue.name, state: 'delayed' }, counts.delayed);
-    metricsService.queueDepthGauge.set({ queue_name: taskQueue.name, state: 'waiting' }, counts.waiting);
-
-    res.set('Content-Type', metricsService.getMetricsContentType());
-    res.end(await metricsService.getMetrics());
-  } catch (err) {
-    logger.error({ err }, 'Failed to generate metrics');
-    res.status(500).send('Metrics generation error');
-  }
-});
-
-// REST Endpoint: Dispatch Email Job
-app.post('/api/jobs/email', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const job = await dispatchEmailJob(req.body);
-    res.status(202).json({
-      message: 'Email job dispatched successfully',
-      jobId: job.id,
-      idempotencyKey: job.data.idempotencyKey,
-      status: 'QUEUED',
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// REST Endpoint: Dispatch Report Job
-app.post('/api/jobs/report', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const job = await dispatchReportJob(req.body);
-    res.status(202).json({
-      message: 'Report job dispatched successfully',
-      jobId: job.id,
-      idempotencyKey: job.data.idempotencyKey,
-      status: 'QUEUED',
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Centralized Error Handling Middleware
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  if (err instanceof ZodError) {
-    res.status(400).json({
-      error: 'Invalid Payload Schema',
-      details: err.errors,
-    });
-    return;
-  }
-
-  const message = err instanceof Error ? err.message : 'Internal Server Error';
-  logger.error({ err }, 'API Endpoint Error');
-  res.status(500).json({ error: message });
-});
-
-// Initialize Worker
-initializeTaskWorker();
-
-// Start Server
 const server = app.listen(config.PORT, () => {
+  // The API and worker intentionally share one process and one Render service.
+  //
+  // The worker starts only once the HTTP server is accepting connections, because
+  // WEBHOOK_DELIVERY jobs deliver over loopback to this same process. Starting the
+  // worker first leaves a window where a job left in the queue from a previous
+  // deploy is picked up before the listener exists, fails with ECONNREFUSED, and
+  // burns a retry attempt on a dependency that was never actually down.
+  initializeTaskWorker();
+
   logger.info(
-    `Server running on http://localhost:${config.PORT} | Bull Board: http://localhost:${config.PORT}/admin/queues | Metrics: http://localhost:${config.PORT}/metrics`
+    {
+      port: config.PORT,
+      adminAuthConfigured: config.adminAuthConfigured,
+      corsAllowedOrigins: config.corsAllowedOrigins.length,
+    },
+    'Server started'
   );
+
+  if (!config.adminAuthConfigured) {
+    // The queue dashboard is public and read-only, so it is unaffected by this.
+    // Only /metrics is gated by these credentials.
+    logger.info(
+      'BULLBOARD_USER/BULLBOARD_PASSWORD are unset: /metrics will refuse all requests. The public read-only queue dashboard is unaffected.'
+    );
+  }
 });
 
-// Graceful Shutdown Logic
 async function gracefulShutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Received shutdown signal. Commencing graceful shutdown...');
+
+  const forceExit = setTimeout(() => {
+    logger.fatal('Forced shutdown after 10s timeout');
+    process.exit(1);
+  }, 10000);
+  // Do not let the force-exit timer hold the event loop open on a clean exit.
+  forceExit.unref();
 
   server.close(async () => {
     logger.info('HTTP server closed');
@@ -188,16 +62,13 @@ async function gracefulShutdown(signal: string): Promise<void> {
       logger.info('Graceful shutdown completed. Exiting process.');
       process.exit(0);
     } catch (err) {
-      logger.error({ err }, 'Error during graceful shutdown');
+      logger.error(
+        { errMessage: err instanceof Error ? err.message : 'Unknown error' },
+        'Error during graceful shutdown'
+      );
       process.exit(1);
     }
   });
-
-  // Force exit if shutdown takes longer than 10 seconds
-  setTimeout(() => {
-    logger.fatal('Forced shutdown after 10s timeout');
-    process.exit(1);
-  }, 10000);
 }
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));

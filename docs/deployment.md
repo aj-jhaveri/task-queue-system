@@ -23,10 +23,32 @@ cp .env.example .env
 | `REDIS_HOST` | `localhost` | Yes | Redis server hostname or container service name |
 | `REDIS_PORT` | `6379` | Yes | Redis server port |
 | `REDIS_PASSWORD` | *Empty* | No | Redis authentication password (recommended for production) |
+| `BULLBOARD_USER` | *Empty* | No | Username for `/metrics` **only**. The queue dashboard is public and read-only and does not use it. `/metrics` fails closed if unset |
+| `BULLBOARD_PASSWORD` | *Empty* | No | Password for `/metrics`. Never commit a real value |
+| `DASHBOARD_SNAPSHOT_TTL_MS` | `300000` | No | Idle backstop for the dashboard snapshot cache. **Load-bearing for the Redis command budget.** Not the refresh rate — real events invalidate immediately |
+| `DASHBOARD_POLL_INTERVAL_SECONDS` | `10` | No | Forced Bull Board UI poll interval. Safe to keep low because polls are served from the snapshot cache |
+| `DASHBOARD_MAX_CACHE_ENTRIES` | `64` | No | Snapshot cache entry ceiling; bounds memory against a query-string key-space attack |
+| `DASHBOARD_RATE_LIMIT_MAX_PER_IP` | `120` | No | Per-IP ceiling for the public dashboard, covering the uncached job-detail routes |
+| `WEBHOOK_TIMEOUT_MS` | `5000` | No | Timeout for the webhook processor's real HTTP delivery |
+| `CORS_ALLOWED_ORIGINS` | `https://slakedesign.com,https://www.slakedesign.com` | Yes (deployed) | Comma-separated browser origin allowlist. Wildcards are ignored |
+| `WORKER_DRAIN_DELAY_SECONDS` | `60` | No | Idle long-poll seconds. **Load-bearing for the Redis command budget** |
+| `WORKER_STALLED_INTERVAL_MS` | `300000` | No | Stalled-job check interval. **Load-bearing for the Redis command budget** |
 | `WORKER_CONCURRENCY` | `5` | No | Number of concurrent jobs processed per worker instance |
-| `RATE_LIMIT_MAX` | `100` | No | Maximum jobs processed within rate limit window |
-| `RATE_LIMIT_DURATION_MS` | `60000` | No | Duration window in milliseconds for rate limiting |
+| `RATE_LIMIT_MAX` | `100` | No | BullMQ worker-side processing limit within the window |
+| `RATE_LIMIT_DURATION_MS` | `60000` | No | BullMQ worker-side limiter window in milliseconds |
+| `HTTP_RATE_LIMIT_MAX_PER_IP` | `20` | No | HTTP job submissions allowed per client IP per window |
+| `HTTP_RATE_LIMIT_MAX_GLOBAL` | `200` | No | HTTP job submissions allowed from all clients per window |
+| `HTTP_RATE_LIMIT_WINDOW_MS` | `60000` | No | HTTP intake rate limit window |
+| `MAX_QUEUE_DEPTH` | `1000` | No | Pending-job ceiling; submissions beyond it return `429` |
+| `QUEUE_DEPTH_CACHE_TTL_MS` | `5000` | No | TTL for the on-demand queue-depth read |
+| `JSON_BODY_LIMIT` | `16kb` | No | Maximum accepted request body size |
+| `TRUST_PROXY_HOPS` | `1` | No | Proxy hops to trust for client IP resolution (Render uses 1) |
 | `SQLITE_DB_PATH` | `./data/idempotency.db` | No | File path for primary SQLite idempotency database |
+
+> `WORKER_DRAIN_DELAY_SECONDS` and `WORKER_STALLED_INTERVAL_MS` bound idle Redis
+> consumption. BullMQ's defaults (5 / 30000) cost ~37,440 commands per idle day,
+> which exceeds Upstash's free monthly allowance on its own. See
+> [security-remediation.md](security-remediation.md) before changing them.
 
 ---
 
@@ -86,7 +108,7 @@ npm start
 ## Health & Monitoring Endpoints
 
 * **Health Check:** `GET http://localhost:3000/health` (Returns status of Express, Redis, and SQLite)
-* **Bull Board Dashboard:** `http://localhost:3000/admin/queues` (Queue administration UI)
+* **Bull Board Dashboard:** `http://localhost:3000/admin/queues` (Public, read-only queue observability. No credentials in any environment; all mutating methods return `405`)
 * **Grafana Visual Dashboard:** `http://localhost:3001` (*Login: `admin` / `admin`*)
 * **Prometheus Metrics Scraper:** `GET http://localhost:3000/metrics` (or Prometheus UI at `http://localhost:9090`)
 

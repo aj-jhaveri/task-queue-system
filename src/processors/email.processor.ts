@@ -3,17 +3,21 @@ import { EmailJobDataSchema, EmailJobData, JobExecutionResult, JOB_NAMES } from 
 import { idempotencyDb } from '../storage/idempotency.db.js';
 import { logger } from '../logging/logger.js';
 
+/**
+ * Processes an email notification job.
+ *
+ * There is no artificial failure or delay switch here. Any error thrown by this
+ * processor is a genuine failure and is handled by BullMQ's real retry path:
+ * up to `attempts` tries with exponential backoff, then DLQ routing.
+ */
 export async function processEmailJob(job: Job<EmailJobData>): Promise<JobExecutionResult> {
   const startTime = Date.now();
   const data = EmailJobDataSchema.parse(job.data);
-  const { to, subject, body, idempotencyKey, simulateFailure, delayMs } = data;
+  const { to, subject, body, idempotencyKey } = data;
 
-  logger.info(
-    { jobId: job.id, idempotencyKey, to, attempt: job.attemptsMade },
-    'Processing Email Job'
-  );
+  logger.info({ jobId: job.id, idempotencyKey, attempt: job.attemptsMade }, 'Processing email job');
 
-  // 1. Primary Datastore Idempotency Check
+  // 1. Primary datastore idempotency check
   if (idempotencyDb.hasBeenProcessed(idempotencyKey)) {
     const existing = idempotencyDb.getRecord(idempotencyKey);
     logger.warn(
@@ -31,19 +35,7 @@ export async function processEmailJob(job: Job<EmailJobData>): Promise<JobExecut
     };
   }
 
-  // 2. Artificial Processing Delay Simulation
-  if (delayMs > 0) {
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-  }
-
-  // 3. Simulated Failure Injection
-  if (simulateFailure) {
-    const errorMsg = `Simulated Email Processor failure (attempt ${job.attemptsMade + 1})`;
-    logger.error({ jobId: job.id, idempotencyKey, attempt: job.attemptsMade }, errorMsg);
-    throw new Error(errorMsg);
-  }
-
-  // 4. Mock Email Side-Effect Logic
+  // 2. Email side-effect
   const resultData = {
     messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
     deliveredTo: to,
@@ -53,7 +45,7 @@ export async function processEmailJob(job: Job<EmailJobData>): Promise<JobExecut
 
   const durationMs = Date.now() - startTime;
 
-  // 5. Record Execution Success in Primary Datastore
+  // 3. Record execution success in the primary datastore
   idempotencyDb.recordSuccess(idempotencyKey, JOB_NAMES.EMAIL_NOTIFICATION, resultData);
 
   logger.info(

@@ -1,7 +1,7 @@
 import readline from 'readline';
 import http from 'http';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = process.env.CLI_API_BASE || 'http://localhost:3000';
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -12,11 +12,11 @@ function printBanner(): void {
   console.clear();
   console.log(`
 ===============================================================
-    ⚡ Task Queue System - Interactive CLI Tester
+    Task Queue System - Interactive CLI Tester
 ===============================================================
 Server: ${API_BASE}
 Grafana Dashboard: http://localhost:3001
-Bull Board UI:     http://localhost:3000/admin/queues
+Bull Board UI:     ${API_BASE}/admin/queues  (public, read-only)
 ===============================================================
 `);
 }
@@ -25,12 +25,12 @@ function promptMenu(): void {
   console.log(`
 Select an action to execute:
 
-  [1] Send Successful Email Job
+  [1] Send Email Job
   [2] Run Automated Idempotency Test (Send 1st Run + 2nd Duplicate)
   [3] Send Financial Report Job
-  [4] Send Failure Simulation Job (Test Retries & DLQ)
+  [4] Send Failing Webhook Job (real retry -> exponential backoff -> DLQ)
   [5] Check System Health (/health)
-  [6] View Metrics Summary (/metrics)
+  [6] View Metrics Summary (/metrics - local development only)
   [7] Exit CLI
 `);
   rl.question('Enter choice [1-7]: ', handleChoice);
@@ -72,30 +72,43 @@ function postPromise(path: string, body: object): Promise<{ statusCode: number; 
 function makeGetRequest(path: string, callback: () => void): void {
   const url = new URL(path, API_BASE);
 
-  http.get(url, (res) => {
-    let responseBody = '';
-    res.on('data', (chunk) => (responseBody += chunk));
-    res.on('end', () => {
-      console.log(`\nHTTP Response Status: ${res.statusCode}`);
-      try {
-        console.log('Response:', JSON.stringify(JSON.parse(responseBody), null, 2));
-      } catch {
-        console.log('Response Output (truncated):\n', responseBody.substring(0, 500) + '...');
-      }
+  http
+    .get(url, (res) => {
+      let responseBody = '';
+      res.on('data', (chunk) => (responseBody += chunk));
+      res.on('end', () => {
+        console.log(`\nHTTP Response Status: ${res.statusCode}`);
+        if (res.statusCode === 401 || res.statusCode === 503) {
+          console.log('This endpoint requires admin credentials outside local development.');
+        }
+        try {
+          console.log('Response:', JSON.stringify(JSON.parse(responseBody), null, 2));
+        } catch {
+          console.log('Response Output (truncated):\n', responseBody.substring(0, 500) + '...');
+        }
+        console.log('\nPress ENTER to continue...');
+        rl.question('', () => {
+          printBanner();
+          callback();
+        });
+      });
+    })
+    .on('error', (err) => {
+      console.error('\nHTTP Request Failed:', err.message);
+      console.log('Ensure server is running via `npm run dev`!');
       console.log('\nPress ENTER to continue...');
       rl.question('', () => {
         printBanner();
-        promptMenu();
+        callback();
       });
     });
-  }).on('error', (err) => {
-    console.error('\nHTTP Request Failed:', err.message);
-    console.log('Ensure server is running via `npm run dev`!');
-    console.log('\nPress ENTER to continue...');
-    rl.question('', () => {
-      printBanner();
-      promptMenu();
-    });
+}
+
+function afterAction(): void {
+  console.log('\nPress ENTER to continue...');
+  rl.question('', () => {
+    printBanner();
+    promptMenu();
   });
 }
 
@@ -117,14 +130,10 @@ async function handleChoice(choice: string): Promise<void> {
       } catch (err: any) {
         console.error('Request failed:', err.message);
       }
-      console.log('\nPress ENTER to continue...');
-      rl.question('', () => {
-        printBanner();
-        promptMenu();
-      });
+      afterAction();
       break;
 
-    case '2':
+    case '2': {
       console.log('\n---------------------------------------------------------------');
       console.log('  RUNNING AUTOMATED IDEMPOTENCY TEST');
       console.log('---------------------------------------------------------------');
@@ -138,7 +147,7 @@ async function handleChoice(choice: string): Promise<void> {
           body: 'First execution run.',
           idempotencyKey: testKey,
         });
-        console.log(`Step 1 Status: ${res1.statusCode} OK -> Queued for worker processing.`);
+        console.log(`Step 1 Status: ${res1.statusCode} -> Queued for worker processing.`);
       } catch (err: any) {
         console.error('Step 1 failed:', err.message);
       }
@@ -151,23 +160,18 @@ async function handleChoice(choice: string): Promise<void> {
           body: 'Duplicate execution run.',
           idempotencyKey: testKey,
         });
-        console.log(`Step 2 Status: ${res2.statusCode} OK -> Queued.`);
+        console.log(`Step 2 Status: ${res2.statusCode} -> Queued.`);
       } catch (err: any) {
         console.error('Step 2 failed:', err.message);
       }
 
       console.log('\n---------------------------------------------------------------');
-      console.log('✔ Test Dispatched!');
-      console.log('Check your `npm run dev` server terminal to verify the log:');
-      console.log('  "[WARN] Duplicate job execution blocked by SQLite primary datastore..."');
+      console.log('Test dispatched. Check your `npm run dev` server terminal for:');
+      console.log('  "Duplicate job execution blocked by SQLite primary datastore..."');
       console.log('---------------------------------------------------------------');
-
-      console.log('\nPress ENTER to continue...');
-      rl.question('', () => {
-        printBanner();
-        promptMenu();
-      });
+      afterAction();
       break;
+    }
 
     case '3':
       console.log('\nSending Financial Report Job...');
@@ -183,34 +187,26 @@ async function handleChoice(choice: string): Promise<void> {
       } catch (err: any) {
         console.error('Request failed:', err.message);
       }
-      console.log('\nPress ENTER to continue...');
-      rl.question('', () => {
-        printBanner();
-        promptMenu();
-      });
+      afterAction();
       break;
 
     case '4':
-      console.log('\nSending Failure Simulation Job (will fail 3 times & move to DLQ)...');
+      console.log('\nSending Webhook Delivery Job to an unavailable dependency...');
+      console.log('The HTTP delivery is real and will genuinely fail. Watch the server');
+      console.log('log for attempts 1/3, 2/3, 3/3, then the DLQ routing message.');
       try {
-        const res = await postPromise('/api/jobs/report', {
-          reportType: 'ANALYTICS',
-          userEmail: 'admin@company.com',
-          filters: { debug: true },
-          idempotencyKey: `cli_fail_${timestamp}`,
-          simulateFailure: true,
+        const res = await postPromise('/api/jobs/webhook', {
+          destination: 'DEMO_UNAVAILABLE',
+          event: 'cli.retry_showcase',
+          idempotencyKey: `cli_webhook_${timestamp}`,
         });
         console.log(`HTTP Response Status: ${res.statusCode}`);
         console.log('Response Payload:', JSON.stringify(res.data, null, 2));
-        console.log('\nCheck Bull Board (http://localhost:3000/admin/queues) under `dlq-task-queue` to see the failed job!');
+        console.log(`\nInspect the DLQ entry at ${API_BASE}/admin/queues`);
       } catch (err: any) {
         console.error('Request failed:', err.message);
       }
-      console.log('\nPress ENTER to continue...');
-      rl.question('', () => {
-        printBanner();
-        promptMenu();
-      });
+      afterAction();
       break;
 
     case '5':

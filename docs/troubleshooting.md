@@ -17,24 +17,38 @@ Failed jobs stored in `dlq-task-queue` contain the following structured JSON pay
   "data": {
     "reportType": "FINANCIAL",
     "userEmail": "admin@company.com",
-    "idempotencyKey": "key_999",
-    "simulateFailure": true
+    "idempotencyKey": "key_999"
   },
-  "failedReason": "Simulated Report Processor failure (attempt 3)",
+  "failedReason": "SQLITE_IOERR: disk I/O error",
   "failedAt": "2026-07-26T18:15:00.000Z",
   "attemptsMade": 3,
   "stacktrace": [
-    "Error: Simulated Report Processor failure...",
-    "    at processReportJob (src/processors/report.processor.ts:28:11)"
+    "Error: SQLITE_IOERR: disk I/O error",
+    "    at processReportJob (src/processors/report.processor.ts:59:20)"
   ]
 }
 ```
 
-### Inspecting & Retrying DLQ Jobs via Bull Board UI
-1. Open `http://localhost:3000/admin/queues` in your browser.
+> Failures are always genuine. The system has no request field or admin control for
+> forcing a job to fail; DLQ entries only ever represent real processor errors.
+> Controlled failures for testing are injected inside the test suite via mocks
+> (see `tests/worker.spec.ts`).
+
+### Inspecting DLQ Jobs via Bull Board UI
+1. Open `http://localhost:3000/admin/queues` (or the deployed dashboard) in your
+   browser. No credentials are required in any environment.
 2. Click on `dlq-task-queue`.
 3. Review failed job data, stacktraces, and error reasons.
-4. To retry a failed job after fixing underlying causes, click **Retry** on the target job card.
+
+**Retrying is deliberately unavailable through the dashboard.** It is public and
+read-only: `readOnlyMode` hides the retry control, and the middleware guard refuses
+the underlying `PUT` with `405` regardless of the UI state. To requeue a job after
+fixing the root cause, dispatch a fresh one through `POST /api/jobs/*` with a new
+idempotency key, or operate on the queue directly with the CLI (`npm run cli`).
+
+If you need a genuinely writable dashboard for operations, mount a second Bull
+Board instance behind `requireAdminAuth` rather than removing the guard from the
+public one — see `SECURITY.md`.
 
 ### Inspecting DLQ via Redis CLI
 ```bash
@@ -68,6 +82,25 @@ LLEN bull:dlq-task-queue:wait
      ```bash
      nc -zv localhost 6379
      ```
+
+---
+
+### Scenario A2: Deployed service answers HTTP but reports `"redis":"DOWN"`
+
+* **Symptom:** `GET /health` returns `503` with `{"services":{"redis":"DOWN","sqlite":"UP","worker":"UP"}}`, while `GET /` returns `200` normally. Job dispatch fails with `503`.
+* **Diagnosis:** The process is alive and serving; only the Redis connection is failing. That narrows it to configuration or deploy state, not the application. Check the Upstash **command counter** first — if it reads `0`, nothing has ever connected to that database, which distinguishes a bad connection from an intermittent one.
+* **Root causes, in order of likelihood:**
+
+  1. **The deploy never landed.** A cancelled or failed deploy leaves the previous instance running with the *previous* environment. If `REDIS_URL` was updated after that instance started — or the old database it points at was deleted — the running process keeps trying to reach an address that no longer exists. In Render, check the service's deploy status: anything other than a green **Deployed** on the latest commit means the environment you think is live is not.
+     *Fix:* trigger a fresh deploy. Changing an environment variable normally does this automatically, but only if the resulting deploy is allowed to finish.
+
+  2. **`REDIS_URL` holds Upstash's REST URL instead of its TCP URL.** Upstash's console exposes both, and they are not interchangeable. The REST API tab gives `https://<host>.upstash.io` plus a *separate* bearer token; the Redis connect tab gives `redis://default:<password>@<host>.upstash.io:6379`. This service needs the second one. `getNormalizedRedisUrl()` rewrites `https://` to `rediss://`, so a REST URL parses and connects — but it carries no password, so it fails authentication and reports `DOWN` with no obvious clue.
+     *Fix:* copy the TCP URL from the Redis connect tab. Strip any `redis-cli --tls -u` prefix; the variable takes only the URL itself. `redis://` is fine — TLS is applied automatically for `upstash.io` hosts.
+
+  3. **`REDIS_URL` is unset or misspelled.** The config falls back to `REDIS_HOST`/`REDIS_PORT`, which default to `localhost:6379`. In a container that is connection-refused, presenting as the same `DOWN`.
+     *Fix:* confirm the variable name exactly, then redeploy.
+
+* **Verification:** after a successful deploy, `GET /health` returns `200` / `HEALTHY`, and the Upstash command counter begins climbing slowly (a few thousand per day at idle). A counter still pinned at `0` means the new configuration is still not live.
 
 ---
 

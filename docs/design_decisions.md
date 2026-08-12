@@ -20,7 +20,7 @@ This document details core architectural choices, technology comparisons, and te
 
 ### BullMQ + Redis Rationale
 * **Tight Node.js Event-Loop Integration:** BullMQ leverages Redis Lua scripts to execute atomic queue state transitions (`waiting` -> `active` -> `completed` / `failed`) without blocking the Node.js event loop.
-* **Native Job Scheduling & Delayed Execution:** BullMQ supports delayed jobs (`delayMs`), rate limiting (`limiter: { max, duration }`), and automatic retention policies (`removeOnComplete`, `removeOnFail`) directly out of the box.
+* **Native Job Scheduling & Delayed Execution:** BullMQ supports delayed jobs (`opts.delay`), rate limiting (`limiter: { max, duration }`), and automatic retention policies (`removeOnComplete`, `removeOnFail`) directly out of the box.
 * **Developer Velocity & Lightweight Footprint:** Redis runs effortlessly in local development and test environments via a single lightweight Docker container (`redis:7-alpine`), requiring < 20MB of RAM compared to multi-gigabyte Java/Scala Kafka clusters.
 
 ---
@@ -71,8 +71,27 @@ By storing idempotency records in a durable primary database (`idempotency.db`),
 ### Q3: Why check idempotency *before* processing?
 * **Answer:** Checking idempotency prior to executing side-effects prevents executing non-idempotent operations (such as charging a payment API or sending a customer email) more than once, even when BullMQ re-delivers a job due to network partitions or worker crashes.
 
-### Q4: Why use mock processors (`email.processor.ts`, `report.processor.ts`)?
-* **Answer:** Mock processors allow exact simulation of realistic production scenarios—such as network delays (`delayMs`) and intermittent third-party API outages (`simulateFailure: true`)—to verify that worker retries, rate-limiting, and DLQ escalation function predictably under stress.
+### Q4: Why use stand-in processors (`email.processor.ts`, `report.processor.ts`)?
+* **Answer:** The processors perform the full real job lifecycle—validation, idempotency check, side-effect, durable success record—against a stand-in side-effect rather than a live email/reporting vendor, so the queue mechanics can be demonstrated without third-party credentials. They contain **no** artificial failure or delay switches: earlier revisions accepted `simulateFailure` and `delayMs` as API fields, which let any unauthenticated caller force three retry attempts plus a DLQ write from one HTTP request (and, via `delayMs`, hold worker slots open). Both fields were removed. Retry, backoff, and DLQ behavior is verified in the test suite by injecting genuine dependency errors with mocks.
+
+### Q4b: If there is no failure switch, how does the public demo show a retry?
+* **Answer:** Through a failure that is real. The `WEBHOOK_DELIVERY` job type performs a genuine HTTP `POST`, and the `DEMO_UNAVAILABLE` destination resolves to a loopback path the service deliberately does not serve. The request really is issued and really returns `404`; the processor has no branch that chooses to fail, it only reports what the network returned. Everything downstream — 3 attempts, exponential backoff, DLQ routing into `dlq-task-queue` — is BullMQ's own machinery, unmodified and visible in the public dashboard.
+* **Why not let the caller pass a URL?** That would be an SSRF hole on an unauthenticated endpoint: a caller could aim the worker at cloud metadata endpoints or internal services. Callers pick a destination from an enum instead, and the mapping to a real address happens server-side, so no caller-supplied value ever reaches the HTTP client. The defence is that no URL-shaped input exists, not that one is filtered.
+* **Why loopback rather than a public "always fails" service?** The deployment has to keep working unattended. Depending on a third-party endpoint would make the demo's correctness contingent on someone else's uptime.
+
+### Q4c: The queue dashboard is public with no login. Why is that not reckless?
+* **Answer:** Because the boundary was moved from *who may look* to *what may be done*. An earlier revision put Bull Board behind HTTP Basic auth, which made the demo unusable for its actual purpose — being looked at — while leaving the real risk intact: the mutating routes still existed, and safety depended on a shared credential never leaking.
+
+  An open dashboard carries two unrelated risks, so it takes two independent controls:
+
+  **Mutation.** `readOnlyMode: true` on the adapters is not a security control; it is a UI flag. `POST /api/queues/:name/add`, `PUT .../obliterate`, `PUT .../empty` and the rest stay mounted and reachable with `curl`. A middleware refuses every non-`GET` method with `405` before the request reaches Bull Board, which removes the entire mutation surface. It refuses them unconditionally — valid admin credentials do not unlock them — because read-only is a property of the deployment, not of the caller.
+
+  **Cost.** This is the one that actually caused an outage. Bull Board's UI polls `GET /api/queues` at roughly 8-10 Redis commands per poll. At the stock 5-second interval that is ~5,000 commands/hour for a single open tab, and one forgotten tab exhausted a 500K/month Upstash allowance in three days.
+
+* **Why caching rather than a slower poll interval?** Slowing the poll trades responsiveness for cost and still scales linearly with the number of viewers — ten tabs cost ten times as much. A server-side snapshot cache decouples cost from both poll rate and viewer count: ten viewers cost exactly what one costs, and the UI is free to poll every 10 seconds because polls are answered from memory.
+* **Isn't cached data stale data?** Not in the way that matters. The TTL is an idle backstop, not the refresh rate. The snapshot is invalidated the instant queue state actually changes — a job dispatched, completed, or failed — so the next poll after any real event goes to Redis and returns live data. While the queue is idle nothing is changing, so serving a cached snapshot is not a stale answer, it is the correct answer obtained for free. A visitor who dispatches a job sees it appear on the next poll.
+* **What does it cost in practice?** Measured against a local Redis with a dashboard tab polling every 10 seconds and the cache warm, a 106-second idle window cost one ~10-command refresh — the other nine polls in that window reached Redis zero times. The worst case is bounded by the backstop rather than by traffic: ~288 refreshes/day (~2,880 commands/day, ~86,000/month) even with a tab left open permanently, against ~3.6M/month for the uncached equivalent.
+* **How would you know if it regressed?** `/metrics` exposes `task_queue_dashboard_snapshot_total` labelled by `source`. The ratio of `redis` to `cache` is the health signal; a rising `redis` count means something is invalidating snapshots more often than expected.
 
 ### Q5: What happens if Redis crashes?
 * **Answer:** Docker Compose persistence saves Redis queue data to disk (`--save 60 1`). If Redis crashes, uncompleted jobs remain safely persisted on disk. Furthermore, because primary idempotency records reside in SQLite, processed jobs will never execute duplicate side-effects when Redis recovers.

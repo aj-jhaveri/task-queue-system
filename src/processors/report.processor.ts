@@ -3,17 +3,24 @@ import { ReportJobDataSchema, ReportJobData, JobExecutionResult, JOB_NAMES } fro
 import { idempotencyDb } from '../storage/idempotency.db.js';
 import { logger } from '../logging/logger.js';
 
+/**
+ * Processes a report generation job.
+ *
+ * There is no artificial failure or delay switch here. Any error thrown by this
+ * processor is a genuine failure and is handled by BullMQ's real retry path:
+ * up to `attempts` tries with exponential backoff, then DLQ routing.
+ */
 export async function processReportJob(job: Job<ReportJobData>): Promise<JobExecutionResult> {
   const startTime = Date.now();
   const data = ReportJobDataSchema.parse(job.data);
-  const { reportType, userEmail, filters, idempotencyKey, simulateFailure, delayMs } = data;
+  const { reportType, userEmail, filters, idempotencyKey } = data;
 
   logger.info(
-    { jobId: job.id, idempotencyKey, reportType, userEmail, attempt: job.attemptsMade },
-    'Processing Report Generation Job'
+    { jobId: job.id, idempotencyKey, reportType, attempt: job.attemptsMade },
+    'Processing report generation job'
   );
 
-  // 1. Primary Datastore Idempotency Check
+  // 1. Primary datastore idempotency check
   if (idempotencyDb.hasBeenProcessed(idempotencyKey)) {
     const existing = idempotencyDb.getRecord(idempotencyKey);
     logger.warn(
@@ -31,19 +38,7 @@ export async function processReportJob(job: Job<ReportJobData>): Promise<JobExec
     };
   }
 
-  // 2. Artificial Processing Delay Simulation
-  if (delayMs > 0) {
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-  }
-
-  // 3. Simulated Failure Injection
-  if (simulateFailure) {
-    const errorMsg = `Simulated Report Processor failure (attempt ${job.attemptsMade + 1})`;
-    logger.error({ jobId: job.id, idempotencyKey, attempt: job.attemptsMade }, errorMsg);
-    throw new Error(errorMsg);
-  }
-
-  // 4. Mock Report Side-Effect Logic
+  // 2. Report generation side-effect
   const resultData = {
     reportId: `rpt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
     reportType,
@@ -55,7 +50,7 @@ export async function processReportJob(job: Job<ReportJobData>): Promise<JobExec
 
   const durationMs = Date.now() - startTime;
 
-  // 5. Record Execution Success in Primary Datastore
+  // 3. Record execution success in the primary datastore
   idempotencyDb.recordSuccess(idempotencyKey, JOB_NAMES.REPORT_GENERATION, resultData);
 
   logger.info(

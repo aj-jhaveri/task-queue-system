@@ -4,5 +4,26 @@ data/
 *.db
 *.db-journal
 *.log
+
+# Environment / secrets - never commit real credentials
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+
+# Test & build artifacts
+coverage/
+.vitest/
+*.tsbuildinfo
+
+# Editor / OS
 .DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Other AI/agent tool configs
+.codex/
+.claude/

@@ -26,6 +26,9 @@
   ],
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "dependencies": {
     "@bull-board/api": "^6.7.13",
     "@bull-board/express": "^6.7.13",
@@ -33,6 +36,8 @@
     "bullmq": "^5.41.6",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.6.2",
+    "helmet": "^8.3.0",
     "ioredis": "^5.5.0",
     "pino": "^9.6.0",
     "prom-client": "^15.1.3",

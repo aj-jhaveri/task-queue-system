@@ -1,9 +1,26 @@
 {
   "info": {
     "name": "Task Queue System API",
-    "description": "Postman API Collection for testing the Production-Grade Task Processing System.",
+    "description": "Postman API Collection for testing the Production-Grade Task Processing System. Job payloads are validated with strict schemas: unknown fields are rejected with HTTP 400. There is no request field for forcing a job to fail.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "description": "Base URL of the running service."
+    },
+    {
+      "key": "adminUser",
+      "value": "",
+      "description": "BULLBOARD_USER. Required for /metrics outside local development. Leave blank here and set it in a Postman environment; never commit a real value."
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "description": "BULLBOARD_PASSWORD. Leave blank here and set it in a Postman environment; never commit a real value."
+    }
+  ],
   "item": [
     {
       "name": "Health Check",
@@ -11,25 +28,44 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "http://localhost:3000/health",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["health"]
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
         }
       }
     },
     {
-      "name": "Prometheus Metrics",
+      "name": "Prometheus Metrics (admin auth required outside development)",
       "request": {
         "method": "GET",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminUser}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        },
         "header": [],
         "url": {
-          "raw": "http://localhost:3000/metrics",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["metrics"]
+          "raw": "{{baseUrl}}/metrics",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "metrics"
+          ]
         }
       }
     },
@@ -45,14 +81,18 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"to\": \"alice@example.com\",\n  \"subject\": "System Alert\",\n  \"body\": \"Your task processing engine is online.\",\n  \"idempotencyKey\": \"email_postman_001\"\n}"
+          "raw": "{\n  \"to\": \"alice@example.com\",\n  \"subject\": \"System Alert\",\n  \"body\": \"Your task processing engine is online.\",\n  \"idempotencyKey\": \"email_postman_001\"\n}"
         },
         "url": {
-          "raw": "http://localhost:3000/api/jobs/email",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["api", "jobs", "email"]
+          "raw": "{{baseUrl}}/api/jobs/email",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "jobs",
+            "email"
+          ]
         }
       }
     },
@@ -68,19 +108,23 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"reportType\": \"FINANCIAL\",\n  \"userEmail\": \"finance@company.com\",\n  \"filters\": { \"quarter\": \"Q4\", \"year\": 2026 },\n  \"idempotencyKey\": \"report_postman_001\",\n  \"simulateFailure\": false\n}"
+          "raw": "{\n  \"reportType\": \"FINANCIAL\",\n  \"userEmail\": \"finance@company.com\",\n  \"filters\": { \"quarter\": \"Q4\", \"year\": 2026 },\n  \"idempotencyKey\": \"report_postman_001\"\n}"
         },
         "url": {
-          "raw": "http://localhost:3000/api/jobs/report",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["api", "jobs", "report"]
+          "raw": "{{baseUrl}}/api/jobs/report",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "jobs",
+            "report"
+          ]
         }
       }
     },
     {
-      "name": "Dispatch Report Failure (DLQ Test)",
+      "name": "Rejected Payload: unknown field returns 400",
       "request": {
         "method": "POST",
         "header": [
@@ -91,15 +135,126 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"reportType\": \"ANALYTICS\",\n  \"userEmail\": \"admin@company.com\",\n  \"filters\": { \"debug\": true },\n  \"idempotencyKey\": \"report_fail_001\",\n  \"simulateFailure\": true\n}"
+          "raw": "{\n  \"reportType\": \"ANALYTICS\",\n  \"userEmail\": \"admin@company.com\",\n  \"filters\": { \"debug\": true },\n  \"idempotencyKey\": \"report_reject_001\",\n  \"simulateFailure\": true\n}"
+        },
+        "description": "Demonstrates strict schema validation. simulateFailure is not a field this API accepts, so this request returns HTTP 400 rather than queueing a job that fails on purpose.",
+        "url": {
+          "raw": "{{baseUrl}}/api/jobs/report",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "jobs",
+            "report"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Dispatch Webhook Job (real retry -> DLQ)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"destination\": \"DEMO_UNAVAILABLE\",\n  \"event\": \"demo.retry_showcase\",\n  \"idempotencyKey\": \"webhook_demo_001\"\n}"
         },
         "url": {
-          "raw": "http://localhost:3000/api/jobs/report",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "3000",
-          "path": ["api", "jobs", "report"]
-        }
+          "raw": "{{baseUrl}}/api/jobs/webhook",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "jobs",
+            "webhook"
+          ]
+        },
+        "description": "Performs a REAL HTTP delivery. DEMO_UNAVAILABLE resolves to a loopback path the service deliberately does not serve, so the delivery genuinely fails and BullMQ applies its real retry policy (3 attempts, exponential backoff) before routing the job to dlq-task-queue. Watch it land in the public dashboard at /admin/queues. Nothing here is simulated: the processor reports what the network returned."
+      }
+    },
+    {
+      "name": "Dispatch Webhook Job (succeeds)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"destination\": \"DEMO_AVAILABLE\",\n  \"event\": \"demo.delivery\",\n  \"idempotencyKey\": \"webhook_demo_002\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/jobs/webhook",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "jobs",
+            "webhook"
+          ]
+        },
+        "description": "Same job type aimed at the loopback sink that returns 200, so the delivery succeeds on the first attempt."
+      }
+    },
+    {
+      "name": "Rejected Payload: caller-supplied URL returns 400",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"destination\": \"DEMO_AVAILABLE\",\n  \"event\": \"demo\",\n  \"idempotencyKey\": \"webhook_demo_003\",\n  \"targetUrl\": \"http://169.254.169.254/latest/meta-data/\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/jobs/webhook",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "jobs",
+            "webhook"
+          ]
+        },
+        "description": "destination is an enum, never a URL. No caller-supplied value reaches the HTTP client, so this job type has no SSRF surface. Any URL-shaped field is rejected as an unknown key by the strict schema."
+      }
+    },
+    {
+      "name": "Queue Dashboard is read-only (mutation returns 405)",
+      "request": {
+        "method": "PUT",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/admin/queues/api/queues/task-processing-queue/obliterate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "queues",
+            "api",
+            "queues",
+            "task-processing-queue",
+            "obliterate"
+          ]
+        },
+        "description": "The dashboard is public with no login, so the boundary is what may be DONE, not who may look. Every non-GET method is refused before reaching Bull Board. This returns 405 even with valid admin credentials: read-only is a property of the deployment, not of the caller."
       }
     }
   ]

@@ -1,14 +1,24 @@
 import { Queue, Job } from 'bullmq';
-import { getRedisOptions } from '../config/redis.connection.js';
+import { getProducerRedisOptions } from '../config/redis.connection.js';
 import { logger } from '../logging/logger.js';
 
 export const DLQ_QUEUE_NAME = 'dlq-task-queue';
 
+/**
+ * Dead Letter Queue for jobs that exhausted every retry attempt.
+ *
+ * Retention is bounded. Previously both removeOnComplete and removeOnFail were
+ * `false`, meaning DLQ entries accumulated forever and Redis storage grew without
+ * limit. A 30-day / 1,000-entry ceiling keeps real failures inspectable while
+ * remaining bounded.
+ */
+const DLQ_RETENTION_SECONDS = 60 * 60 * 24 * 30;
+
 export const dlqQueue = new Queue(DLQ_QUEUE_NAME, {
-  connection: getRedisOptions(),
+  connection: getProducerRedisOptions(),
   defaultJobOptions: {
-    removeOnComplete: false,
-    removeOnFail: false,
+    removeOnComplete: { count: 1000, age: DLQ_RETENTION_SECONDS },
+    removeOnFail: { count: 1000, age: DLQ_RETENTION_SECONDS },
   },
 });
 

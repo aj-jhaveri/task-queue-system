@@ -3,33 +3,74 @@ import { z } from 'zod';
 export const JOB_NAMES = {
   EMAIL_NOTIFICATION: 'EMAIL_NOTIFICATION',
   REPORT_GENERATION: 'REPORT_GENERATION',
+  WEBHOOK_DELIVERY: 'WEBHOOK_DELIVERY',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
 
-export const EmailJobDataSchema = z.object({
-  to: z.string().email(),
-  subject: z.string().min(1),
-  body: z.string(),
-  idempotencyKey: z.string().min(1),
-  simulateFailure: z.boolean().optional().default(false),
-  delayMs: z.number().nonnegative().optional().default(0),
-});
+/**
+ * Public job schemas.
+ *
+ * These are `.strict()` on purpose. This system processes real work, so there is
+ * no runtime switch for forcing artificial job failures or artificial delays.
+ * Unknown keys are rejected rather than silently stripped, so a client sending a
+ * removed field (for example `simulateFailure`) receives an explicit 400 instead
+ * of a misleading 202 for a job that will not behave as the caller expects.
+ *
+ * Genuine failures still exercise the full retry -> exponential backoff -> DLQ
+ * path; they originate from real processor errors, not from request input.
+ */
+export const EmailJobDataSchema = z
+  .object({
+    to: z.string().email(),
+    subject: z.string().min(1).max(500),
+    body: z.string().max(100_000),
+    idempotencyKey: z.string().min(1).max(255),
+  })
+  .strict();
 
 export type EmailJobData = z.infer<typeof EmailJobDataSchema>;
 export type EmailJobDataInput = z.input<typeof EmailJobDataSchema>;
 
-export const ReportJobDataSchema = z.object({
-  reportType: z.enum(['FINANCIAL', 'ANALYTICS', 'USER_AUDIT']),
-  userEmail: z.string().email(),
-  filters: z.record(z.unknown()).optional().default({}),
-  idempotencyKey: z.string().min(1),
-  simulateFailure: z.boolean().optional().default(false),
-  delayMs: z.number().nonnegative().optional().default(0),
-});
+export const ReportJobDataSchema = z
+  .object({
+    reportType: z.enum(['FINANCIAL', 'ANALYTICS', 'USER_AUDIT']),
+    userEmail: z.string().email(),
+    filters: z.record(z.unknown()).optional().default({}),
+    idempotencyKey: z.string().min(1).max(255),
+  })
+  .strict();
 
 export type ReportJobData = z.infer<typeof ReportJobDataSchema>;
 export type ReportJobDataInput = z.input<typeof ReportJobDataSchema>;
+
+/**
+ * Webhook delivery destinations.
+ *
+ * Callers select a NAMED destination; they never supply a URL. The name is mapped
+ * to a concrete address server-side, which is what keeps this job type free of
+ * SSRF surface - there is no input that can be pointed at cloud metadata endpoints,
+ * internal services, or arbitrary third parties.
+ *
+ * `DEMO_UNAVAILABLE` targets a dependency that is genuinely unavailable, which is
+ * how the retry demonstration stays honest. Nothing is simulated: the processor
+ * performs a real HTTP request, the request really fails, and BullMQ's real retry,
+ * exponential backoff, and DLQ routing handle it from there.
+ */
+export const WEBHOOK_DESTINATIONS = ['DEMO_AVAILABLE', 'DEMO_UNAVAILABLE'] as const;
+export type WebhookDestination = (typeof WEBHOOK_DESTINATIONS)[number];
+
+export const WebhookJobDataSchema = z
+  .object({
+    destination: z.enum(WEBHOOK_DESTINATIONS),
+    event: z.string().min(1).max(200),
+    payload: z.record(z.unknown()).optional().default({}),
+    idempotencyKey: z.string().min(1).max(255),
+  })
+  .strict();
+
+export type WebhookJobData = z.infer<typeof WebhookJobDataSchema>;
+export type WebhookJobDataInput = z.input<typeof WebhookJobDataSchema>;
 
 export interface JobExecutionResult {
   success: boolean;

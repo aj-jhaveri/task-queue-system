@@ -46,7 +46,7 @@ sequenceDiagram
             Proc-->>Worker: Return cached result (isDuplicate: true)
             Worker->>Redis: Mark job completed (Duration: 0ms)
         else Primary Datastore Idempotency Miss (First Execution)
-            Proc->>Proc: Execute mock processing (delayMs, side-effects)
+            Proc->>Proc: Execute processing side-effects
             alt Successful Processing Execution
                 Proc->>DB: recordSuccess(idempotencyKey, jobName, resultData)
                 Proc-->>Worker: Return JobExecutionResult
@@ -115,6 +115,7 @@ sequenceDiagram
 │                                  PROCESSOR REGISTRY & EXECUTION                                  │
 │  - EMAIL_NOTIFICATION ──► processEmailJob()                                                      │
 │  - REPORT_GENERATION  ──► processReportJob()                                                     │
+│  - WEBHOOK_DELIVERY   ──► processWebhookJob()   (real HTTP; genuine failures)                    │
 └──────────────────────────┬───────────────────────────────────────────────────────────────────────┘
                            │
                            ▼

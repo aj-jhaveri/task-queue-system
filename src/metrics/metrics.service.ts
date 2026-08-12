@@ -6,6 +6,7 @@ export class MetricsService {
   public jobsFailedTotal: client.Counter<'job_type' | 'error_type'>;
   public processingDuration: client.Histogram<'job_type'>;
   public queueDepthGauge: client.Gauge<'queue_name' | 'state'>;
+  public dashboardSnapshotTotal: client.Counter<'source'>;
 
   constructor() {
     this.register = new client.Registry();
@@ -37,6 +38,18 @@ export class MetricsService {
       name: 'task_queue_depth_jobs',
       help: 'Current queue depth by state',
       labelNames: ['queue_name', 'state'],
+      registers: [this.register],
+    });
+
+    // Divide source="redis" by source="cache" to see how much Redis budget the
+    // public dashboard is actually consuming. A healthy ratio is heavily skewed
+    // toward "cache"; a rising "redis" count means snapshots are being invalidated
+    // more often than expected and is the first place to look if the Upstash
+    // command counter climbs faster than the projection in docs/design_decisions.md.
+    this.dashboardSnapshotTotal = new client.Counter({
+      name: 'task_queue_dashboard_snapshot_total',
+      help: 'Public dashboard data requests, by whether they hit Redis or the snapshot cache',
+      labelNames: ['source'],
       registers: [this.register],
     });
   }
