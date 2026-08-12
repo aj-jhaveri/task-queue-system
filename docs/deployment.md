@@ -103,6 +103,39 @@ npm run build
 npm start
 ```
 
+### Render Build & Start Commands
+
+| Setting | Value |
+| :--- | :--- |
+| **Build Command** | `npm install --include=dev && npm run build && npm prune --omit=dev` |
+| **Start Command** | `npm start` |
+| **Instances** | `1` |
+
+All three parts of the build command are load-bearing, and the reason is that
+Render compiles TypeScript on the server, in the same filesystem the application
+then runs in.
+
+**`--include=dev`** — `NODE_ENV=production` makes npm set `omit=dev`, which strips
+the `devDependencies`. But `typescript` and the `@types/*` packages are exactly what
+`tsc` needs to compile. Without this flag the build fails with dozens of
+`TS2591: Cannot find name 'process'` and `TS7016: Could not find a declaration file`
+errors. It is not obvious from the error output that the cause is an environment
+variable rather than a missing dependency.
+
+**`npm prune --omit=dev`** — because build and runtime share a filesystem here,
+installing dev dependencies would otherwise leave `typescript`, `vitest` and every
+`@types` package in the running container. Pruning after the build removes them once
+`dist/` exists: 152 packages ship instead of 202. Dev dependencies live only as long
+as compilation.
+
+Dropping `NODE_ENV=production` instead of adding these flags also produces a working
+build, but it is the wrong trade: the variable is what keeps `pino-pretty` (a
+devDependency) from being loaded by the logger and keeps production logs from being
+tagged `development`.
+
+The `deploy-parity` job in `.github/workflows/ci.yml` reproduces this exact sequence
+and boots the pruned result, so a regression here fails CI rather than a deploy.
+
 ---
 
 ## Health & Monitoring Endpoints
