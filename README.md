@@ -1,5 +1,9 @@
 # Production-Grade Task Processing System
 
+[![CI](https://github.com/aj-jhaveri/task-queue-system/actions/workflows/ci.yml/badge.svg)](https://github.com/aj-jhaveri/task-queue-system/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-22.x-brightgreen.svg)](.nvmrc)
+
 **Live demo:** [slakedesign.com/demo/queue](https://slakedesign.com/demo/queue)
 **Live queue dashboard:** [slake-task-queue.onrender.com/admin/queues](https://slake-task-queue.onrender.com/admin/queues)
 
