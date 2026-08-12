@@ -49,7 +49,17 @@ const EnvironmentSchema = z.object({
   // docs/design_decisions.md. DASHBOARD_SNAPSHOT_TTL_MS is the idle backstop, not
   // the perceived refresh rate: a dispatch or job completion invalidates the
   // snapshot immediately, so the board is fresh whenever anything is happening.
-  DASHBOARD_SNAPSHOT_TTL_MS: z.coerce.number().int().positive().default(300000),
+  // 15 minutes. One refresh costs a MEASURED 27 Redis commands across the two
+  // registered queues (10 zcard + 6 llen + 4 lindex + 2 hexists + 2 hget + 2
+  // evalsha), not the ~10 originally assumed. At a 5-minute backstop a single
+  // permanently-open tab would cost ~233K/month, which is half the Upstash
+  // allowance for a page nobody is looking at. At 15 minutes it is ~78K.
+  //
+  // Raising it costs nothing in perceived freshness: every state change this
+  // system can observe - enqueue, completion, failure, DLQ routing - invalidates
+  // the snapshot immediately, so the backstop only ever governs a queue where
+  // nothing is happening.
+  DASHBOARD_SNAPSHOT_TTL_MS: z.coerce.number().int().positive().default(900000),
   DASHBOARD_POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().default(10),
   DASHBOARD_MAX_CACHE_ENTRIES: z.coerce.number().int().positive().default(64),
   DASHBOARD_RATE_LIMIT_MAX_PER_IP: z.coerce.number().int().positive().default(120),

@@ -1,6 +1,7 @@
 import { Queue, Job } from 'bullmq';
 import { getProducerRedisOptions } from '../config/redis.connection.js';
 import { logger } from '../logging/logger.js';
+import { invalidateDashboardSnapshot } from '../middleware/dashboard.cache.js';
 
 export const DLQ_QUEUE_NAME = 'dlq-task-queue';
 
@@ -46,6 +47,12 @@ export async function sendToDLQ(job: Job, error: Error): Promise<void> {
   const dlqJob = await dlqQueue.add(`DLQ_${job.name}`, payload, {
     jobId: `dlq_${job.id}_${Date.now()}`,
   });
+
+  // Invalidate AFTER the write lands. The worker's `failed` handler also
+  // invalidates, but it does so before this function runs, so a snapshot rebuilt
+  // in that window would miss the DLQ entry and show a stale count until the next
+  // event or the TTL backstop - which is now 15 minutes.
+  invalidateDashboardSnapshot();
 
   logger.error(
     {

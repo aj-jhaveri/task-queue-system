@@ -10,13 +10,17 @@ import { metricsService } from '../metrics/metrics.service.js';
  *
  * The dashboard is unauthenticated by design, so its cost has to be bounded
  * structurally rather than by asking visitors to behave. Bull Board's UI polls a
- * single route - `GET /api/queues` - and each poll costs roughly 8-10 Redis
- * commands across the two registered queues (getJobCounts + isPaused +
- * getGlobalConcurrency per queue, plus getJobs for the visible tab).
+ * single route - `GET /api/queues` - and one refresh of the overview costs a
+ * MEASURED 27 Redis commands across the two registered queues: 10 `zcard` and
+ * 6 `llen` for the per-state counts, 4 `lindex` and 2 `hget` for the visible jobs,
+ * 2 `hexists` for paused state, and 2 `evalsha`.
  *
- * Uncached at the stock 5s interval that is ~5,000 commands/hour per open tab.
- * One tab left open for three days is ~360K commands on its own, which is what
- * exhausted the previous 500K/month Upstash allowance.
+ * Uncached at the stock 5s interval that is ~19,000 commands/hour per open tab.
+ * A forgotten tab is what exhausted the previous 500K/month Upstash allowance in
+ * roughly three days.
+ *
+ * Measure this again rather than trusting the number if the registered queue count
+ * changes: the cost scales with how many queues are on the overview.
  *
  * WHAT THIS CHANGES
  *
@@ -32,8 +36,9 @@ import { metricsService } from '../metrics/metrics.service.js';
  * data. While the queue is idle nothing is changing, so serving a cached snapshot
  * is not a stale answer; it is the correct answer, obtained for free.
  *
- * Worst case with the default 300s backstop is ~288 refreshes/day (~2.9K commands),
- * versus ~1.5M/month uncached.
+ * A refresh costs a measured 27 Redis commands across the two queues, so the worst
+ * case with the default 900s backstop is 96 refreshes/day (~2.6K commands/day,
+ * ~78K/month) even with a tab open permanently - against ~14M/month uncached.
  */
 
 interface SnapshotEntry {

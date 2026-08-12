@@ -121,22 +121,35 @@ responsiveness rather than raised for thrift.
 **3. Freshness comes from events, not timers.**
 `invalidateDashboardSnapshot()` fires from the producer on every enqueue and from
 the worker on `completed` and `failed`. The TTL (`DASHBOARD_SNAPSHOT_TTL_MS`,
-default 300s) is only an idle backstop for transitions nothing observed, such as a
+default 900s) is only an idle backstop for transitions nothing observed, such as a
 delayed job maturing. While the queue is idle nothing changes, so a cached snapshot
 is the correct answer rather than a stale one.
 
 Cost comparison for one continuously open tab:
 
-| Configuration | Poll → Redis ratio | Commands/day | Commands/month |
+One refresh costs a **measured 27 Redis commands** across the two registered
+queues (10 `zcard` + 6 `llen` + 4 `lindex` + 2 `hexists` + 2 `hget` + 2 `evalsha`).
+An earlier revision of this document assumed ~10 and understated every figure
+below by roughly 3x; the numbers here are measured against a real Redis.
+
+| Configuration | Refreshes/day | Commands/day | Commands/month |
 |---|---|---|---|
-| Stock Bull Board, 5s polling, uncached | 1:1 | ~120,000 | ~3,600,000 |
-| Basic auth + `forceInterval: 60`, uncached | 1:1 | ~10,080 | ~302,000 |
-| Public + snapshot cache (current) | ~30:1 idle | ~2,880 | ~86,000 |
+| Stock Bull Board, 5s polling, uncached | 17,280 | ~466,000 | ~14,000,000 |
+| Basic auth + `forceInterval: 60`, uncached | 1,440 | ~38,900 | ~1,166,000 |
+| Snapshot cache, 5-minute backstop | 288 | ~7,780 | ~233,000 |
+| Snapshot cache, 15-minute backstop (current) | 96 | ~2,590 | ~78,000 |
 
 The current row is the *worst* case: a tab open permanently with the queue idle, so
-every refresh is a TTL backstop expiry rather than a real event. Add the ~95,000/month
-idle-worker baseline and the total is roughly 181,000 of the 500,000 allowance,
-leaving headroom for actual job traffic.
+every refresh is a backstop expiry rather than a real event. Add the ~95,000/month
+idle-worker baseline and the total is roughly **173,000 of the 500,000 allowance**,
+leaving ~327,000 for real job traffic.
+
+The backstop was raised from 5 to 15 minutes once the per-refresh cost was measured
+rather than assumed: at 5 minutes a single forgotten tab cost ~233,000/month, which
+combined with the worker consumed two thirds of the allowance for a page nobody was
+looking at. Raising it costs nothing in perceived freshness, because every state
+change the system can observe invalidates the snapshot immediately - the backstop
+only governs a queue where nothing is happening.
 
 **Measured**, not just derived. Against a local Redis with a dashboard tab polling
 every 10 seconds and the cache warm, a 106-second idle window consumed 48 commands

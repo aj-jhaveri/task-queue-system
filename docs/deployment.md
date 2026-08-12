@@ -25,7 +25,7 @@ cp .env.example .env
 | `REDIS_PASSWORD` | *Empty* | No | Redis authentication password (recommended for production) |
 | `BULLBOARD_USER` | *Empty* | No | Username for `/metrics` **only**. The queue dashboard is public and read-only and does not use it. `/metrics` fails closed if unset |
 | `BULLBOARD_PASSWORD` | *Empty* | No | Password for `/metrics`. Never commit a real value |
-| `DASHBOARD_SNAPSHOT_TTL_MS` | `300000` | No | Idle backstop for the dashboard snapshot cache. **Load-bearing for the Redis command budget.** Not the refresh rate — real events invalidate immediately |
+| `DASHBOARD_SNAPSHOT_TTL_MS` | `900000` | No | Idle backstop for the dashboard snapshot cache. **Load-bearing for the Redis command budget.** Not the refresh rate — real events invalidate immediately |
 | `DASHBOARD_POLL_INTERVAL_SECONDS` | `10` | No | Forced Bull Board UI poll interval. Safe to keep low because polls are served from the snapshot cache |
 | `DASHBOARD_MAX_CACHE_ENTRIES` | `64` | No | Snapshot cache entry ceiling; bounds memory against a query-string key-space attack |
 | `DASHBOARD_RATE_LIMIT_MAX_PER_IP` | `120` | No | Per-IP ceiling for the public dashboard, covering the uncached job-detail routes |
