@@ -107,7 +107,7 @@ npm start
 
 | Setting | Value |
 | :--- | :--- |
-| **Build Command** | `npm install --include=dev && npm run build && npm prune --omit=dev` |
+| **Build Command** | `npm ci --include=dev && npm run build && npm prune --omit=dev` |
 | **Start Command** | `npm start` |
 | **Instances** | `1` |
 
@@ -121,6 +121,16 @@ the `devDependencies`. But `typescript` and the `@types/*` packages are exactly 
 `TS2591: Cannot find name 'process'` and `TS7016: Could not find a declaration file`
 errors. It is not obvious from the error output that the cause is an environment
 variable rather than a missing dependency.
+
+**`npm ci` rather than `npm install`** — this one is not stylistic. Render restores a
+cached `node_modules` between deploys, and `npm install` leaves an already-present
+package alone. `better-sqlite3` is a native module whose compiled binary is tied to a
+Node major version (`NODE_MODULE_VERSION`), so a cached binary built under an earlier
+Node will survive `npm install` and then fail to load at startup with
+`ERR_DLOPEN_FAILED ... compiled against a different Node.js version`. The build
+succeeds and the process crashes on boot, which is a confusing place to discover it.
+`npm ci` deletes `node_modules` outright and installs from the lockfile, so a stale
+native binary cannot persist across a Node version change.
 
 **`npm prune --omit=dev`** — because build and runtime share a filesystem here,
 installing dev dependencies would otherwise leave `typescript`, `vitest` and every
