@@ -27,3 +27,8 @@ coverage/
 # Other AI/agent tool configs
 .codex/
 .claude/
+
+# Personal documents - never commit (contains phone/email)
+docs/resume.html
+*resume*.html
+*resume*.pdf
