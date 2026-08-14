@@ -48,7 +48,11 @@ export class MetricsService {
     // command counter climbs faster than the projection in docs/design_decisions.md.
     this.dashboardSnapshotTotal = new client.Counter({
       name: 'task_queue_dashboard_snapshot_total',
-      help: 'Public dashboard data requests, by whether they hit Redis or the snapshot cache',
+      // source: `cache` served from a fresh snapshot, `redis` rebuilt against Redis,
+      // `stale` served an expired snapshot because the global refresh budget was
+      // exhausted, `shed` refused with a 503 because no snapshot existed to serve.
+      // A rising `stale`/`shed` count means the dashboard is being hammered.
+      help: 'Public dashboard data requests, by whether they hit Redis, the snapshot cache, or the refresh budget',
       labelNames: ['source'],
       registers: [this.register],
     });

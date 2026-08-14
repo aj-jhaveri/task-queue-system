@@ -17,7 +17,7 @@ import { requireAdminAuth } from './middleware/admin.auth.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { perIpJobLimiter, globalJobLimiter, dashboardLimiter } from './middleware/rate.limit.js';
 import { dashboardReadOnlyGuard, blockRedisStatsRoute } from './middleware/dashboard.guard.js';
-import { dashboardSnapshotCache } from './middleware/dashboard.cache.js';
+import { dashboardSnapshotCache, setDashboardQueueNames } from './middleware/dashboard.cache.js';
 import { WEBHOOK_SINK_PATH, WEBHOOK_UNAVAILABLE_PATH } from './processors/webhook.processor.js';
 import { QueueDepthExceededError, QueueUnavailableError } from './errors/app.errors.js';
 
@@ -92,9 +92,17 @@ export function buildApp(): Express {
   //     is the control that actually prevents an anonymous drain or obliterate.
   //   Cost     - `dashboardSnapshotCache` answers the polled data route from
   //     memory, so Redis spend is decoupled from viewer count and poll rate. This
-  //     is what makes an always-on public board viable on a free Redis tier.
+  //     is what makes an always-on public board viable on a free Redis tier. The
+  //     cache keys on validated parameters only, and a global refresh budget caps
+  //     rebuilds across all callers, so neither a rotated query string nor a fleet
+  //     of IPs can convert the board back into an uncached one.
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
+
+  // The snapshot cache validates `activeQueue` against this list, so a request for
+  // a queue that was never registered collapses onto the default view instead of
+  // minting a snapshot of its own.
+  setDashboardQueueNames([taskQueue.name, dlqQueue.name]);
 
   createBullBoard({
     queues: [

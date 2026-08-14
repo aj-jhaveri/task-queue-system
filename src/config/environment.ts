@@ -49,11 +49,11 @@ const EnvironmentSchema = z.object({
   // docs/design_decisions.md. DASHBOARD_SNAPSHOT_TTL_MS is the idle backstop, not
   // the perceived refresh rate: a dispatch or job completion invalidates the
   // snapshot immediately, so the board is fresh whenever anything is happening.
-  // 15 minutes. One refresh costs a MEASURED 27 Redis commands across the two
+  // 15 minutes. One refresh costs a MEASURED 26 Redis commands across the two
   // registered queues (10 zcard + 6 llen + 4 lindex + 2 hexists + 2 hget + 2
   // evalsha), not the ~10 originally assumed. At a 5-minute backstop a single
-  // permanently-open tab would cost ~233K/month, which is half the Upstash
-  // allowance for a page nobody is looking at. At 15 minutes it is ~78K.
+  // permanently-open tab would cost ~225K/month, which is nearly half the Upstash
+  // allowance for a page nobody is looking at. At 15 minutes it is ~75K.
   //
   // Raising it costs nothing in perceived freshness: every state change this
   // system can observe - enqueue, completion, failure, DLQ routing - invalidates
@@ -62,6 +62,19 @@ const EnvironmentSchema = z.object({
   DASHBOARD_SNAPSHOT_TTL_MS: z.coerce.number().int().positive().default(900000),
   DASHBOARD_POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().default(10),
   DASHBOARD_MAX_CACHE_ENTRIES: z.coerce.number().int().positive().default(64),
+
+  // Global ceiling on snapshot rebuilds, across all callers rather than per IP.
+  // The snapshot cache bounds cost for honest clients; this bounds it for hostile
+  // ones, the way globalJobLimiter does for job intake.
+  //
+  // Derivation of the default: a rebuild can only follow a poll, and the UI polls
+  // every DASHBOARD_POLL_INTERVAL_SECONDS (10s), so one open view can trigger at
+  // most 6 rebuilds/minute even if every poll is invalidated by real job activity.
+  // 60/minute therefore covers about ten simultaneously active distinct views,
+  // which is well beyond anything this demo sees, while capping the hostile case
+  // at 60 x 26 = ~1,560 commands/minute instead of an unbounded number.
+  DASHBOARD_MAX_REFRESHES_PER_WINDOW: z.coerce.number().int().positive().default(60),
+  DASHBOARD_REFRESH_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   DASHBOARD_RATE_LIMIT_MAX_PER_IP: z.coerce.number().int().positive().default(120),
 
   // Webhook delivery job. The demo's retry showcase performs a real HTTP request

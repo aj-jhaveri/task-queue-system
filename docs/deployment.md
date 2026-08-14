@@ -27,7 +27,9 @@ cp .env.example .env
 | `BULLBOARD_PASSWORD` | *Empty* | No | Password for `/metrics`. Never commit a real value |
 | `DASHBOARD_SNAPSHOT_TTL_MS` | `900000` | No | Idle backstop for the dashboard snapshot cache. **Load-bearing for the Redis command budget.** Not the refresh rate — real events invalidate immediately |
 | `DASHBOARD_POLL_INTERVAL_SECONDS` | `10` | No | Forced Bull Board UI poll interval. Safe to keep low because polls are served from the snapshot cache |
-| `DASHBOARD_MAX_CACHE_ENTRIES` | `64` | No | Snapshot cache entry ceiling; bounds memory against a query-string key-space attack |
+| `DASHBOARD_MAX_CACHE_ENTRIES` | `64` | No | Snapshot cache entry ceiling; bounds memory when many distinct views are in use |
+| `DASHBOARD_MAX_REFRESHES_PER_WINDOW` | `60` | No | Global ceiling on snapshot rebuilds across **all** callers. **Load-bearing for the Redis command budget.** Past it, the last snapshot for that view is served stale rather than refreshed |
+| `DASHBOARD_REFRESH_WINDOW_MS` | `60000` | No | Window the rebuild ceiling is counted over |
 | `DASHBOARD_RATE_LIMIT_MAX_PER_IP` | `120` | No | Per-IP ceiling for the public dashboard, covering the uncached job-detail routes |
 | `WEBHOOK_TIMEOUT_MS` | `5000` | No | Timeout for the webhook processor's real HTTP delivery |
 | `CORS_ALLOWED_ORIGINS` | `https://slakedesign.com,https://www.slakedesign.com` | Yes (deployed) | Comma-separated browser origin allowlist. Wildcards are ignored |
