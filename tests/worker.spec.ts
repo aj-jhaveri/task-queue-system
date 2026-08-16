@@ -1,5 +1,25 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import { Job } from 'bullmq';
+
+/**
+ * Records the order of the DLQ write and the snapshot invalidation, so the
+ * ordering fix in `sendToDLQ` is pinned rather than assumed. The real
+ * implementation still runs - this only observes it.
+ */
+const { order } = vi.hoisted(() => ({ order: [] as string[] }));
+
+vi.mock('../src/middleware/dashboard.cache.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../src/middleware/dashboard.cache.js')>();
+  return {
+    ...actual,
+    invalidateDashboardSnapshot: () => {
+      actual.invalidateDashboardSnapshot();
+      order.push('invalidate');
+    },
+  };
+});
+
 import { processEmailJob } from '../src/processors/email.processor.js';
 import { processReportJob } from '../src/processors/report.processor.js';
 import { getProcessorForJob } from '../src/processors/registry.js';
@@ -147,6 +167,43 @@ describe('Worker Processor & Idempotency', () => {
       expect(routed).toBeDefined();
       expect(routed?.data.failedReason).toContain('SQLITE_IOERR');
       expect(routed?.data.attemptsMade).toBe(3);
+    });
+
+    /**
+     * The dashboard snapshot must be invalidated AFTER the DLQ entry is written,
+     * not before.
+     *
+     * The worker's `failed` handler invalidates first and then calls sendToDLQ, so
+     * if this function did not invalidate again afterwards there would be a window
+     * between the two where a poll could rebuild a snapshot that does not contain
+     * the new DLQ entry - and hold it until the next real event or the 15-minute
+     * backstop. Ordering is the whole point, so ordering is what is asserted:
+     * checking only that invalidation happened would still pass if the call were
+     * moved above the write.
+     */
+    it('invalidates the dashboard snapshot only after the DLQ write lands', async () => {
+      order.length = 0;
+
+      const realAdd = dlqQueue.add.bind(dlqQueue);
+      vi.spyOn(dlqQueue, 'add').mockImplementation(async (...args) => {
+        const created = await realAdd(...args);
+        order.push('write');
+        return created;
+      });
+
+      const key = `test_dlq_order_${Date.now()}`;
+      await sendToDLQ(
+        {
+          id: `report_${key}`,
+          name: 'REPORT_GENERATION',
+          attemptsMade: 3,
+          data: { idempotencyKey: key, reportType: 'ANALYTICS' },
+          stacktrace: [],
+        } as unknown as Job,
+        new Error('ordering check')
+      );
+
+      expect(order).toEqual(['write', 'invalidate']);
     });
   });
 

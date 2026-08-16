@@ -58,15 +58,18 @@ touching `src/middleware/dashboard.*`; it records every control and why it exist
 
 ### If you change the snapshot cache, test content, not call counts
 
-The cache has produced two separate defects, both of which passed a green suite:
+Two invariants, both of which a green suite can miss:
 
-1. Keying on `req.originalUrl` let `?junk=N` bypass the cache entirely — 520 Redis
-   commands for 20 requests versus 0 for 20 honest polls.
-2. Canonicalizing the *key* without canonicalizing the *request* let `?page=999`
-   cache a page-999 body under the page-1 key, poisoning the board for every later
-   visitor for a full TTL.
+1. **A caller must not be able to force a miss.** Any parameter that reaches the
+   cache key must be one Bull Board actually reads. Keying on the raw URL lets
+   `?junk=N` bypass the cache entirely — 520 Redis commands for 20 requests versus
+   0 for 20 honest polls.
+2. **The cached body must match the key it is stored under.** Canonicalizing the
+   *key* without canonicalizing the *request* lets `?page=999` cache a page-999 body
+   under the page-1 key, serving it to every later visitor for a full TTL.
 
-Tests that count upstream calls cannot detect either class of bug. Any change here
+A test that counts upstream calls cannot detect either — a bypass and a mismatched
+body both look like ordinary cache activity from a call counter. Any change here
 must assert that the response body corresponds to the parameters the request
 actually asked for. The upstream stand-in in `tests/dashboard.cache.spec.ts` echoes
 its received parameters for exactly this reason — keep it that way.

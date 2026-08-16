@@ -118,16 +118,16 @@ in-process snapshot. Twenty concurrent viewers cost one Redis read, not twenty.
 Because polls are served from memory, `forceInterval` was *lowered* to 10s for
 responsiveness rather than raised for thrift.
 
-**2b. The cache key is canonical, so the cache cannot be sidestepped.**
-The first version of this cache keyed on `req.originalUrl` while deciding
-cacheability from `req.path`. Because `req.path` excludes the query string,
-`/api/queues?junk=1` was cacheable but keyed differently from `/api/queues` — so a
-caller rotating a parameter that Bull Board ignores entirely missed on every single
-request and forced a full Redis rebuild each time. The cache worked exactly as
-designed for honest clients and offered no protection at all against a hostile one.
+**2b. A cache key is only valid if it identifies the response.**
+A cache in front of an unauthenticated route has to answer two questions, and
+getting either wrong is a defect:
 
-Measured against a local Redis, worker stopped so the window contained only
-dashboard traffic:
+*Can a caller force a miss?* An earlier revision keyed on `req.originalUrl` while
+deciding cacheability from `req.path`. `req.path` excludes the query string, so
+`/api/queues?junk=1` was cacheable but keyed differently from `/api/queues` — and
+because Bull Board ignores unknown parameters entirely, a caller rotating one missed
+on every request while receiving identical data. Measured against a local Redis with
+the worker stopped:
 
 | Window | Requests | Redis commands |
 |---|---|---|
@@ -135,41 +135,34 @@ dashboard traffic:
 | Identical URL, repeated | 20 | **0** |
 | Rotating `?junk=N` | 20 | **520** |
 
-At the 120/minute per-IP dashboard limit that is ~3,120 commands/minute from a
-single address — the full 500,000 monthly allowance in **under three hours**,
-without ever tripping a limiter or spoofing anything.
+At the 120/minute per-IP limit that is ~3,120 commands/minute from a single address,
+which spends the 500,000 monthly allowance in under three hours without tripping a
+limiter. A cache that only works for well-behaved callers is not a cost control.
 
-The request is now reduced to only the four parameters `@bull-board/api` actually
-reads (`activeQueue`, `status`, `page`, `jobsPerPage`, verified against the
-installed package), each validated: unknown parameters are dropped, an unregistered
-queue name or unknown status collapses to the default view, `page` is clamped to
-1–100 (the DLQ's 1,000-entry retention at the default page size), and `jobsPerPage`
-to 1–100. The key space is therefore a function of the views that genuinely exist
-rather than of what a caller can type.
+*Does the cached body match the key it is stored under?* This is the question that
+makes canonicalization subtle. Reducing the **key** alone is a cache-poisoning bug:
+if `?page=999` still reaches Bull Board it builds a page-999 payload, that payload
+gets stored under the canonical `page=1` key, and the next visitor asking for page 1
+receives it for a full TTL. The parameters are therefore written back onto
+`req.query` — the only surface `@bull-board/express` reads — so the request, the
+response, and the key always describe the same view.
 
-**The canonical values are written back onto the request, not merely used to build
-the key.** The first attempt at this fix canonicalized only the key, which
-introduced a worse defect than the one being fixed: `?page=999` still reached Bull
-Board, which built a page-999 payload, which was then cached under the canonical
-`page=1` key — so the next honest visitor asking for page 1 was served page 999's
-empty result for a full 15-minute TTL. One crafted URL could corrupt what every
-subsequent viewer saw. Rewriting `req.query` (the only surface `@bull-board/express`
-reads) keeps the cached body and the key it is stored under describing the same
-view. `tests/dashboard.cache.spec.ts` pins this with an upstream handler that echoes
-the parameters it was actually given.
+The request is reduced to the four parameters `@bull-board/api` actually reads
+(`activeQueue`, `status`, `page`, `jobsPerPage`, verified against the installed
+package), each validated: unknown parameters dropped, an unregistered queue name or
+unknown status collapsed to the default view, `page` and `jobsPerPage` clamped to
+1–100. The key space is a function of the views that genuinely exist rather than of
+what a caller can type.
 
 `jobsPerPage` is clamped to a range rather than snapped to a fixed list because the
 UI's page-size control is a free numeric input: a visitor who chooses 15 must get
-15, not be silently served 10. That leaves a larger key space than a fixed list
-would, which is an accepted trade — the hard bound on cost is the refresh budget
-below, and a real visitor's setting is worth more than a tighter key space.
+15, not be silently served 10. That leaves a wider key space than a fixed list
+would — an accepted trade, since the hard bound on cost is the refresh budget below.
 
-This was noticed because `tests/dashboard.cache.spec.ts` already contained the
-sentence *"Cache keys include the query string, so the key space is
-attacker-influenced"* — and then asserted only that **memory** stayed bounded. The
-cost dimension, which is the entire reason the cache exists, went unasserted, and
-that test's own 20 requests were 520 Redis commands. It now asserts the command
-count directly.
+Both properties are pinned in `tests/dashboard.cache.spec.ts`, which asserts command
+cost directly and uses an upstream stand-in that echoes the parameters it received.
+Tests that count upstream calls cannot detect either failure: a bypass and a
+mismatched body both look like ordinary cache activity from a call counter.
 
 **2c. A global refresh ceiling bounds what remains.**
 Canonicalizing the key removes the unbounded bypass but not the bounded one: the
@@ -202,9 +195,7 @@ Cost comparison for one continuously open tab:
 One refresh costs a **measured 26 Redis commands** across the two registered
 queues (10 `zcard` + 6 `llen` + 4 `lindex` + 2 `hexists` + 2 `hget` + 2 `evalsha`).
 An earlier revision of this document assumed ~10 and understated every figure below
-by roughly 2.6x. A later revision quoted 27 in its headline while itemizing the
-components above, which sum to 26; the itemization was right and the headline was
-off by one. 26 is what the direct measurement returns.
+by roughly 2.6x — the reason each row is now measured rather than derived.
 
 | Configuration | Refreshes/day | Commands/day | Commands/month |
 |---|---|---|---|
@@ -239,11 +230,10 @@ local Redis, so running `npm test` during a measurement window invalidates it. A
 earlier attempt was discarded for exactly that reason. Stopping the worker isolates
 dashboard cost from the worker's idle long-poll and delayed-set scan.
 
-An earlier version of this section reported a 106-second idle window and attributed
-a single ~10-command refresh to the dashboard within it. That attribution was made
-under the assumed per-refresh figure and does not reconcile with the measured 26; it
-has been superseded by the direct per-refresh measurement above rather than quietly
-adjusted.
+A previous revision measured a 106-second idle window in aggregate and apportioned
+it between the dashboard and the worker by assumption. Those component figures do
+not reconcile with the per-refresh cost measured directly, and have been replaced by
+it rather than adjusted to fit.
 
 **Residual risk.** Two paths remain bounded by something other than a hard control:
 
@@ -292,8 +282,7 @@ with mocks.
 | 2 | `/admin/queues` publicly reachable, unauthenticated, auto-polling every 5s | Critical | Snapshot cache decouples cost from viewers; `dashboardReadOnlyGuard` refuses all mutating methods; `readOnlyMode` on adapters. Dashboard remains public by design | `tests/dashboard.cache.spec.ts`, `tests/http.security.spec.ts` |
 | 2b | Bull Board mutating routes reachable by hand despite `readOnlyMode` | Critical | `405` guard ahead of the router, unconditional | `tests/http.security.spec.ts` (10 method/route cases) |
 | 2c | `/api/redis/stats` exposed raw Redis `INFO` on a public route | Medium | Route blocked with `404`; `hideRedisDetails` alone only stopped the UI from calling it | `tests/http.security.spec.ts` |
-| 2d | Snapshot cache keyed on `req.originalUrl`, so a rotating query parameter forced a full Redis rebuild per request — measured 520 commands for 20 requests against 0 for 20 honest polls, enough to exhaust the monthly allowance in under 3 hours from one IP | High | Request reduced to validated `activeQueue`/`status`/`page`/`jobsPerPage` only; unknown and out-of-range values collapse onto the default view | `tests/dashboard.cache.spec.ts` ("Cache key canonicalization") |
-| 2d-i | Canonicalizing only the *key* let `?page=999` cache a page-999 body under the page-1 key, serving it to every later visitor for a full TTL — a cache-poisoning defect introduced by the first attempt at 2d | High | Canonical values written back to `req.query`, so the cached body and its key always describe the same view | `tests/dashboard.cache.spec.ts` (upstream handler echoes the parameters it received) |
+| 2d | Snapshot cache keyed on `req.originalUrl`, so a rotating query parameter forced a full Redis rebuild per request — measured 520 commands for 20 requests against 0 for 20 honest polls, enough to exhaust the monthly allowance in under 3 hours from one IP | High | Request reduced to validated `activeQueue`/`status`/`page`/`jobsPerPage`, written back to `req.query` so the cached body always matches its key | `tests/dashboard.cache.spec.ts` ("Cache key canonicalization") |
 | 2e | Dashboard had a per-IP limit but no global ceiling, unlike job intake | Medium | `DASHBOARD_MAX_REFRESHES_PER_WINDOW` caps snapshot rebuilds across all callers; stale snapshot served past the cap, `503` when none exists | `tests/dashboard.cache.spec.ts` ("Global refresh budget") |
 | 3 | `simulateFailure` let anonymous callers force retries + DLQ writes | High | Field removed; strict schemas reject it with 400 | `tests/queue.spec.ts`, `tests/http.security.spec.ts` |
 | 4 | `delayMs` allowed unbounded worker-slot occupation | Medium | Field removed; strict schemas reject it | `tests/queue.spec.ts` |

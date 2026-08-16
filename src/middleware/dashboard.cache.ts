@@ -22,29 +22,37 @@ import { metricsService } from '../metrics/metrics.service.js';
  * Measure this again rather than trusting the number if the registered queue count
  * changes: the cost scales with how many queues are on the overview.
  *
- * WHY THE KEY IS CANONICALIZED
+ * THE KEY MUST IDENTIFY THE RESPONSE
  *
- * Caching on the raw request URL made the cache trivially bypassable. The route
- * check looks at `req.path`, which excludes the query string, so `/api/queues?junk=1`
- * was cacheable but keyed differently from `/api/queues` - and a client rotating a
- * meaningless parameter missed on every request while Bull Board ignored the
- * parameter entirely. Measured: 20 identical polls cost 0 Redis commands, while 20
- * polls with a rotating parameter cost 520. At the per-IP dashboard limit that is
- * ~3,100 commands/minute from a single address, which exhausts a 500K monthly
- * allowance in under three hours without ever tripping a limiter.
+ * Two properties, and getting either wrong is a defect.
  *
- * The key is therefore built from only the four parameters Bull Board's API
- * actually reads - `activeQueue`, `status`, `page`, `jobsPerPage` - each validated
- * against what it is allowed to be. Unknown parameters are dropped, and
- * out-of-range values collapse onto their defaults, so the key space is bounded by
- * the views that genuinely exist rather than by what a caller can type.
+ * A caller must not be able to force a miss. Caching on the raw request URL is
+ * bypassable, because the route check looks at `req.path` (no query string) while
+ * the key carried the whole URL: `?junk=1` was cacheable, keyed uniquely, and
+ * ignored by Bull Board. Measured - 20 identical polls cost 0 Redis commands, 20
+ * polls rotating one parameter cost 520, which at the per-IP limit is ~3,100
+ * commands/minute from one address and spends a 500K monthly allowance in under
+ * three hours.
+ *
+ * The cached body must match the key it is stored under. Reducing the KEY alone is
+ * a cache-poisoning bug: `?page=999` would still reach Bull Board, and its page-999
+ * payload would be stored under the canonical page-1 key and served to the next
+ * honest visitor for a full TTL. So the canonical values are written back onto
+ * `req.query` - the only surface @bull-board/express reads - rather than merely
+ * used to compute a key.
+ *
+ * Both are covered by the four parameters Bull Board's API actually reads:
+ * `activeQueue`, `status`, `page`, `jobsPerPage`, each validated. Unknown
+ * parameters are dropped and out-of-range values collapse onto their defaults, so
+ * the key space is bounded by the views that genuinely exist rather than by what a
+ * caller can type.
  *
  * WHY THERE IS ALSO A GLOBAL CEILING
  *
- * Canonicalizing the key removes the unbounded bypass but not the bounded one: the
+ * Canonicalizing removes the unbounded bypass but not the bounded one: the
  * legitimate view space is still a few thousand distinct snapshots, and sweeping it
  * costs real commands. Job intake already has a global ceiling alongside its per-IP
- * one (`globalJobLimiter`); the dashboard had only per-IP. `refreshBudget` caps how
+ * one (`globalJobLimiter`); the dashboard needs the same. `refreshBudget` caps how
  * many snapshot REBUILDS all callers combined can trigger per window. Past the cap
  * the last good snapshot is served instead. For a public read-only board, briefly
  * stale counts are the right degraded mode - far better than converting a free
@@ -156,8 +164,7 @@ export interface CanonicalQuery {
  *
  * Every parameter is either recognised and echoed, or unrecognised and replaced by
  * its default. That is what makes the key space a function of the dashboard's real
- * views rather than of caller-supplied text, and it is the property the previous
- * `req.originalUrl` key lacked.
+ * views rather than of caller-supplied text.
  *
  * `queueNames` is passed in rather than imported so the middleware stays testable
  * without standing up Bull Board, and so an unregistered queue name cannot mint a
