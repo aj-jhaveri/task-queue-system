@@ -219,6 +219,17 @@ export function invalidateDashboardSnapshot(): void {
  * IP. A fixed window is sufficient here: the goal is a hard bound on Redis spend
  * per unit time, not smooth fairness between clients.
  */
+// SINGLE-PROCESS. This counter, and the snapshot cache above, live in this instance's
+// memory. With one web instance — the current deployment, and what WEB_CONCURRENCY=1
+// pins — the ceiling holds exactly. Run N web instances and each gets its own counter,
+// so the effective ceiling becomes N x DASHBOARD_MAX_REFRESHES_PER_WINDOW with nothing
+// reporting that it has moved.
+//
+// Deliberately not moved to Redis: a shared counter costs a Redis round trip per
+// rebuild check, which spends the budget this exists to protect. At a scale that needs
+// multiple web instances the right answer is a shared cache (the snapshot itself in
+// Redis, read cheaply by all instances), not a shared counter in front of per-instance
+// caches. See docs/design_decisions.md Q8.
 const refreshBudget = { windowStart: 0, used: 0 };
 
 /**
