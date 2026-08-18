@@ -107,6 +107,21 @@ By storing idempotency records in a durable primary database (`idempotency.db`),
 ### Q8: How would this scale to multiple workers?
 * **Answer:** Multiple Node.js worker instances can run in parallel across Kubernetes pods or servers connected to the same Redis cluster. BullMQ's atomic Redis Lua scripts automatically handle job distribution and lock contention across all worker nodes without double-assignment.
 
+* **The web tier is a different question, and the answer is not the same.** The
+  dashboard snapshot cache and its refresh budget (`DASHBOARD_MAX_REFRESHES_PER_WINDOW`)
+  are held in the memory of a single process. Scaling *workers* is safe; scaling *web
+  instances* silently multiplies the Redis ceiling those controls enforce — two
+  instances mean two independent budgets, so the effective cap doubles with nothing
+  reporting that it moved. The current deployment runs one web instance
+  (`WEB_CONCURRENCY=1`), where the stated ceiling is exact.
+
+  This is a deliberate trade, not an oversight left in place: a Redis-backed counter
+  would cost a round trip per rebuild check, spending the very budget it protects. The
+  correct fix at that scale is a **shared snapshot** — the cached view itself in Redis,
+  read cheaply by every instance — rather than a shared counter sitting in front of
+  per-instance caches. Until the web tier actually needs more than one instance, the
+  in-process control is both cheaper and exact.
+
 ### Q9: What would you change for a large-scale production environment?
 * **Answer:** 
   1. Replace SQLite with PostgreSQL or Amazon Aurora with connection pooling (e.g., PgBouncer).
