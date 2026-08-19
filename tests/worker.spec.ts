@@ -21,7 +21,6 @@ vi.mock('../src/middleware/dashboard.cache.js', async (importOriginal) => {
 });
 
 import { processEmailJob } from '../src/processors/email.processor.js';
-import { processReportJob } from '../src/processors/report.processor.js';
 import { getProcessorForJob } from '../src/processors/registry.js';
 import { idempotencyDb } from '../src/storage/idempotency.db.js';
 import { closeRedisConnection } from '../src/config/redis.connection.js';
@@ -121,25 +120,25 @@ describe('Worker Processor & Idempotency', () => {
       expect(idempotencyDb.hasBeenProcessed(key)).toBe(false);
     });
 
-    it('propagates a real datastore error out of the report processor', async () => {
-      const key = `test_real_report_failure_${Date.now()}`;
+    it('propagates a real datastore error out of the job processor', async () => {
+      const key = `test_real_email_failure_${Date.now()}`;
       vi.spyOn(idempotencyDb, 'recordSuccess').mockImplementation(() => {
         throw new Error('SQLITE_BUSY: database is locked');
       });
 
       const mockJob = {
-        id: `report_${key}`,
-        name: 'REPORT_GENERATION',
+        id: `email_${key}`,
+        name: 'EMAIL_NOTIFICATION',
         attemptsMade: 0,
         data: {
-          reportType: 'ANALYTICS',
-          userEmail: 'admin@domain.com',
-          filters: {},
+          to: 'ops@example.com',
+          subject: 'worker failure guard',
+          body: 'body',
           idempotencyKey: key,
         },
       } as Job<never>;
 
-      await expect(processReportJob(mockJob)).rejects.toThrow('SQLITE_BUSY');
+      await expect(processEmailJob(mockJob)).rejects.toThrow('SQLITE_BUSY');
       expect(idempotencyDb.hasBeenProcessed(key)).toBe(false);
     });
 
@@ -152,10 +151,10 @@ describe('Worker Processor & Idempotency', () => {
     it('routes an exhausted job to the DLQ with the real failure reason', async () => {
       const key = `test_dlq_${Date.now()}`;
       const failedJob = {
-        id: `report_${key}`,
-        name: 'REPORT_GENERATION',
+        id: `email_${key}`,
+        name: 'EMAIL_NOTIFICATION',
         attemptsMade: 3,
-        data: { idempotencyKey: key, reportType: 'ANALYTICS' },
+        data: { idempotencyKey: key },
         stacktrace: [],
       } as unknown as Job;
 
@@ -194,10 +193,10 @@ describe('Worker Processor & Idempotency', () => {
       const key = `test_dlq_order_${Date.now()}`;
       await sendToDLQ(
         {
-          id: `report_${key}`,
-          name: 'REPORT_GENERATION',
+          id: `email_${key}`,
+          name: 'EMAIL_NOTIFICATION',
           attemptsMade: 3,
-          data: { idempotencyKey: key, reportType: 'ANALYTICS' },
+          data: { idempotencyKey: key },
           stacktrace: [],
         } as unknown as Job,
         new Error('ordering check')

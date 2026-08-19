@@ -193,21 +193,6 @@ describe('Job intake validation', () => {
     expect(JSON.stringify(await res.json())).toContain('simulateFailure');
   });
 
-  it('rejects a report payload containing simulateFailure with 400', async () => {
-    const res = await fetch(`${baseUrl}/api/jobs/report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        reportType: 'FINANCIAL',
-        userEmail: 'user@example.com',
-        idempotencyKey: `http_sim_report_${Date.now()}`,
-        simulateFailure: true,
-      }),
-    });
-
-    expect(res.status).toBe(400);
-  });
-
   it('rejects an unknown extra field with 400', async () => {
     const res = await fetch(`${baseUrl}/api/jobs/email`, {
       method: 'POST',

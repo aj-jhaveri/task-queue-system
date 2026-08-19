@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 export const JOB_NAMES = {
   EMAIL_NOTIFICATION: 'EMAIL_NOTIFICATION',
-  REPORT_GENERATION: 'REPORT_GENERATION',
   WEBHOOK_DELIVERY: 'WEBHOOK_DELIVERY',
 } as const;
 
@@ -31,18 +30,6 @@ export const EmailJobDataSchema = z
 
 export type EmailJobData = z.infer<typeof EmailJobDataSchema>;
 export type EmailJobDataInput = z.input<typeof EmailJobDataSchema>;
-
-export const ReportJobDataSchema = z
-  .object({
-    reportType: z.enum(['FINANCIAL', 'ANALYTICS', 'USER_AUDIT']),
-    userEmail: z.string().email(),
-    filters: z.record(z.unknown()).optional().default({}),
-    idempotencyKey: z.string().min(1).max(255),
-  })
-  .strict();
-
-export type ReportJobData = z.infer<typeof ReportJobDataSchema>;
-export type ReportJobDataInput = z.input<typeof ReportJobDataSchema>;
 
 /**
  * Webhook delivery destinations.

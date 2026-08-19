@@ -27,13 +27,12 @@ Select an action to execute:
 
   [1] Send Email Job
   [2] Run Automated Idempotency Test (Send 1st Run + 2nd Duplicate)
-  [3] Send Financial Report Job
-  [4] Send Failing Webhook Job (real retry -> exponential backoff -> DLQ)
-  [5] Check System Health (/health)
-  [6] View Metrics Summary (/metrics - local development only)
-  [7] Exit CLI
+  [3] Send Failing Webhook Job (real retry -> exponential backoff -> DLQ)
+  [4] Check System Health (/health)
+  [5] View Metrics Summary (/metrics - local development only)
+  [6] Exit CLI
 `);
-  rl.question('Enter choice [1-7]: ', handleChoice);
+  rl.question('Enter choice [1-6]: ', handleChoice);
 }
 
 function postPromise(path: string, body: object): Promise<{ statusCode: number; data: any }> {
@@ -174,23 +173,6 @@ async function handleChoice(choice: string): Promise<void> {
     }
 
     case '3':
-      console.log('\nSending Financial Report Job...');
-      try {
-        const res = await postPromise('/api/jobs/report', {
-          reportType: 'FINANCIAL',
-          userEmail: 'finance@company.com',
-          filters: { year: 2026, quarter: 'Q4' },
-          idempotencyKey: `cli_report_${timestamp}`,
-        });
-        console.log(`HTTP Response Status: ${res.statusCode}`);
-        console.log('Response Payload:', JSON.stringify(res.data, null, 2));
-      } catch (err: any) {
-        console.error('Request failed:', err.message);
-      }
-      afterAction();
-      break;
-
-    case '4':
       console.log('\nSending Webhook Delivery Job to an unavailable dependency...');
       console.log('The HTTP delivery is real and will genuinely fail. Watch the server');
       console.log('log for attempts 1/3, 2/3, 3/3, then the DLQ routing message.');
@@ -209,24 +191,24 @@ async function handleChoice(choice: string): Promise<void> {
       afterAction();
       break;
 
-    case '5':
+    case '4':
       console.log('\nChecking System Health...');
       makeGetRequest('/health', promptMenu);
       break;
 
-    case '6':
+    case '5':
       console.log('\nFetching Metrics Summary...');
       makeGetRequest('/metrics', promptMenu);
       break;
 
-    case '7':
+    case '6':
       console.log('\nExiting CLI. Goodbye!');
       rl.close();
       process.exit(0);
       break;
 
     default:
-      console.log('\nInvalid choice. Please select 1-7.');
+      console.log('\nInvalid choice. Please select 1-6.');
       setTimeout(() => {
         printBanner();
         promptMenu();

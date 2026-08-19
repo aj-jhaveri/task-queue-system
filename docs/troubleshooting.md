@@ -12,19 +12,19 @@ When a job fails after exhausting all retry attempts (default: 3 attempts with e
 Failed jobs stored in `dlq-task-queue` contain the following structured JSON payload:
 ```json
 {
-  "originalJobId": "report_key_999",
-  "jobName": "REPORT_GENERATION",
+  "originalJobId": "webhook_key_999",
+  "jobName": "WEBHOOK_DELIVERY",
   "data": {
-    "reportType": "FINANCIAL",
-    "userEmail": "admin@company.com",
+    "destination": "DEMO_UNAVAILABLE",
+    "event": "order.created",
     "idempotencyKey": "key_999"
   },
-  "failedReason": "SQLITE_IOERR: disk I/O error",
+  "failedReason": "Request failed with status 404",
   "failedAt": "2026-07-26T18:15:00.000Z",
   "attemptsMade": 3,
   "stacktrace": [
-    "Error: SQLITE_IOERR: disk I/O error",
-    "    at processReportJob (src/processors/report.processor.ts:59:20)"
+    "Error: Request failed with status 404",
+    "    at processWebhookJob (src/processors/webhook.processor.ts:88:11)"
   ]
 }
 ```
@@ -128,7 +128,7 @@ LLEN bull:dlq-task-queue:wait
 * **Root Cause:** Client submitted a job request missing required parameters or with invalid types (e.g. invalid email address format).
 * **Resolution Steps:**
   1. Check the response body `details` array returned by the API.
-  2. Ensure mandatory payload fields (`to`, `subject`, `body`, `idempotencyKey` for email jobs; `reportType`, `userEmail`, `idempotencyKey` for report jobs) match the expected schema.
+  2. Ensure mandatory payload fields (`to`, `subject`, `body`, `idempotencyKey` for email jobs; `destination`, `event`, `idempotencyKey` for webhook jobs) match the expected schema.
 
 ---
 

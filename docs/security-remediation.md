@@ -251,7 +251,7 @@ it rather than adjusted to fit.
 
 ## 4. Job-submission amplification
 
-`POST /api/jobs/email` and `POST /api/jobs/report` were unauthenticated with no rate
+`POST /api/jobs/email` and `POST /api/jobs/webhook` were unauthenticated with no rate
 limiting. The schemas accepted a `simulateFailure` boolean, so one HTTP request
 could force three attempts plus a dead-letter write:
 

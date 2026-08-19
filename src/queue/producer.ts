@@ -5,9 +5,6 @@ import {
   EmailJobDataSchema,
   EmailJobData,
   EmailJobDataInput,
-  ReportJobDataSchema,
-  ReportJobData,
-  ReportJobDataInput,
   WebhookJobDataSchema,
   WebhookJobData,
   WebhookJobDataInput,
@@ -118,18 +115,6 @@ export async function dispatchEmailJob(payload: EmailJobDataInput): Promise<Job<
     // Recipient address is intentionally omitted from logs: it is user-supplied PII.
     { idempotencyKey: validatedData.idempotencyKey },
     'Email job dispatched to queue'
-  );
-}
-
-export async function dispatchReportJob(payload: ReportJobDataInput): Promise<Job<ReportJobData>> {
-  const validatedData = ReportJobDataSchema.parse(payload);
-
-  return enqueue(
-    JOB_NAMES.REPORT_GENERATION,
-    `report_${validatedData.idempotencyKey}`,
-    validatedData,
-    { idempotencyKey: validatedData.idempotencyKey, reportType: validatedData.reportType },
-    'Report job dispatched to queue'
   );
 }
 

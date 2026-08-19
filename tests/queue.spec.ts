@@ -1,8 +1,8 @@
 import { describe, it, expect, afterAll, afterEach } from 'vitest';
 import { ZodError } from 'zod';
-import { dispatchEmailJob, dispatchReportJob, resetQueueDepthCache } from '../src/queue/producer.js';
+import { dispatchEmailJob, resetQueueDepthCache } from '../src/queue/producer.js';
 import { taskQueue } from '../src/queue/queue.js';
-import { EmailJobDataSchema, ReportJobDataSchema } from '../src/types/job.types.js';
+import { EmailJobDataSchema } from '../src/types/job.types.js';
 import { closeRedisConnection } from '../src/config/redis.connection.js';
 
 describe('Queue Producer & Schema Validation', () => {
@@ -40,29 +40,6 @@ describe('Queue Producer & Schema Validation', () => {
     await expect(dispatchEmailJob(invalidPayload as never)).rejects.toThrow(ZodError);
   });
 
-  it('should successfully dispatch a valid report job', async () => {
-    const payload = {
-      reportType: 'FINANCIAL' as const,
-      userEmail: 'finance@example.com',
-      filters: { year: 2026 },
-      idempotencyKey: `idemp_report_${Date.now()}`,
-    };
-
-    const job = await dispatchReportJob(payload);
-    expect(job).toBeDefined();
-    expect(job.id).toBe(`report_${payload.idempotencyKey}`);
-    expect(job.data.reportType).toBe('FINANCIAL');
-  });
-
-  it('should reject invalid report types', async () => {
-    const invalidPayload = {
-      reportType: 'UNKNOWN_TYPE',
-      userEmail: 'user@example.com',
-      idempotencyKey: 'key123',
-    };
-
-    await expect(dispatchReportJob(invalidPayload as never)).rejects.toThrow(ZodError);
-  });
 
   /**
    * Regression guard. `simulateFailure` was a runtime API field that let any
@@ -87,19 +64,6 @@ describe('Queue Producer & Schema Validation', () => {
       }
     });
 
-    it('rejects a report payload containing simulateFailure', () => {
-      const result = ReportJobDataSchema.safeParse({
-        reportType: 'FINANCIAL',
-        userEmail: 'finance@example.com',
-        idempotencyKey: 'key_2',
-        simulateFailure: true,
-      });
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(JSON.stringify(result.error.issues)).toContain('simulateFailure');
-      }
-    });
 
     it('rejects the artificial delayMs field', () => {
       const result = EmailJobDataSchema.safeParse({

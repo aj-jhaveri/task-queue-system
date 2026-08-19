@@ -97,33 +97,6 @@
       }
     },
     {
-      "name": "Dispatch Report Job",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"reportType\": \"FINANCIAL\",\n  \"userEmail\": \"finance@company.com\",\n  \"filters\": { \"quarter\": \"Q4\", \"year\": 2026 },\n  \"idempotencyKey\": \"report_postman_001\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/jobs/report",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "jobs",
-            "report"
-          ]
-        }
-      }
-    },
-    {
       "name": "Rejected Payload: unknown field returns 400",
       "request": {
         "method": "POST",
@@ -135,18 +108,18 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"reportType\": \"ANALYTICS\",\n  \"userEmail\": \"admin@company.com\",\n  \"filters\": { \"debug\": true },\n  \"idempotencyKey\": \"report_reject_001\",\n  \"simulateFailure\": true\n}"
+          "raw": "{\n  \"to\": \"ops@example.com\",\n  \"subject\": \"Strict schema check\",\n  \"body\": \"Unknown fields are rejected.\",\n  \"idempotencyKey\": \"email_reject_001\",\n  \"simulateFailure\": true\n}"
         },
         "description": "Demonstrates strict schema validation. simulateFailure is not a field this API accepts, so this request returns HTTP 400 rather than queueing a job that fails on purpose.",
         "url": {
-          "raw": "{{baseUrl}}/api/jobs/report",
+          "raw": "{{baseUrl}}/api/jobs/email",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
             "api",
             "jobs",
-            "report"
+            "email"
           ]
         }
       }

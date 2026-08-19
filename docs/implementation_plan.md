@@ -35,7 +35,6 @@ task-queue-system/
 │   ├── processors/
 │   │   ├── registry.ts
 │   │   ├── email.processor.ts
-│   │   └── report.processor.ts
 │   ├── workers/
 │   │   └── task.worker.ts
 │   ├── logging/

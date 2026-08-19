@@ -28,7 +28,7 @@ A microservice demonstrating robust background job queues, rate limiting, concur
 
 ## Why It Exists
 
-Distributed backend systems require reliable execution of asynchronous side-effects (e.g., email notifications, heavy analytical report generation) isolated from client HTTP request loops. This project provides a reference implementation addressing critical production concerns:
+Distributed backend systems require reliable execution of asynchronous side-effects (e.g., email notifications, outbound webhook delivery) isolated from client HTTP request loops. This project provides a reference implementation addressing critical production concerns:
 * **Durable Idempotency:** Blocking duplicate side-effects across Redis flushes or network retries.
 * **Resilience:** Automatic retries with exponential backoff and automatic DLQ routing.
 * **Observability:** Metrics scraping and interactive web UI for queue administration.
@@ -57,11 +57,11 @@ Distributed backend systems require reliable execution of asynchronous side-effe
 ```text
 Client
   │
-  │  POST /api/jobs/email  (or /api/jobs/report)
+  │  POST /api/jobs/email  (or /api/jobs/webhook)
   ▼
 Express API (Zod Validation)
   │
-  │  dispatchEmailJob() / dispatchReportJob()
+  │  dispatchEmailJob() / dispatchWebhookJob()
   ▼
 BullMQ Queue ──► Upstash Cloud Redis (rediss://, TLS)
                    │
@@ -152,7 +152,7 @@ safe rather than reckless:
 # HELP task_queue_jobs_processed_total Total number of task queue jobs processed
 # TYPE task_queue_jobs_processed_total counter
 task_queue_jobs_processed_total{job_type="EMAIL_NOTIFICATION",status="success"} 89
-task_queue_jobs_processed_total{job_type="REPORT_GENERATION",status="success"} 53
+task_queue_jobs_processed_total{job_type="WEBHOOK_DELIVERY",status="success"} 53
 
 # HELP task_queue_processing_duration_seconds Task processing duration in seconds
 # TYPE task_queue_processing_duration_seconds histogram
@@ -173,7 +173,7 @@ task_queue_processing_duration_seconds_bucket{job_type="EMAIL_NOTIFICATION",le="
 ### 6. DLQ Escalation Log
 A genuine processor error that survives all three attempts is routed to the DLQ:
 ```json
-{"level":50,"time":1774569610000,"pid":1234,"env":"development","dlqJobId":"dlq_report_key_500_1774569610","originalJobId":"report_key_500","jobName":"REPORT_GENERATION","reason":"SQLITE_IOERR: disk I/O error","msg":"Job exhausted all retry attempts and moved to Dead Letter Queue (DLQ)"}
+{"level":50,"time":1774569610000,"pid":1234,"env":"development","dlqJobId":"dlq_webhook_key_500_1774569610","originalJobId":"webhook_key_500","jobName":"WEBHOOK_DELIVERY","reason":"SQLITE_IOERR: disk I/O error","msg":"Job exhausted all retry attempts and moved to Dead Letter Queue (DLQ)"}
 ```
 
 ---
@@ -252,18 +252,6 @@ curl -X POST https://slake-task-queue.onrender.com/api/jobs/email \
     "subject": "System Alert",
     "body": "Your task processing system is online.",
     "idempotencyKey": "email_demo_001"
-  }'
-```
-
-### Dispatch Report Job
-```bash
-curl -X POST https://slake-task-queue.onrender.com/api/jobs/report \
-  -H "Content-Type: application/json" \
-  -d '{
-    "reportType": "FINANCIAL",
-    "userEmail": "finance@company.com",
-    "filters": { "quarter": "Q3", "year": 2026 },
-    "idempotencyKey": "report_demo_001"
   }'
 ```
 

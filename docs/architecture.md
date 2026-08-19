@@ -23,14 +23,14 @@ sequenceDiagram
     participant DB as SQLite Primary Idempotency DB
     participant DLQ as Dead Letter Queue (DLQ)
 
-    Client->>API: POST /api/jobs/report (with idempotencyKey)
+    Client->>API: POST /api/jobs/webhook (with idempotencyKey)
     API->>Zod: Validate request payload schema
     alt Invalid Payload Schema
         Zod-->>API: Schema Validation Error
         API-->>Client: 400 Bad Request (Validation details)
     else Valid Payload Schema
         Zod-->>API: Validated Job Input
-        API->>Queue: dispatchReportJob(payload)
+        API->>Queue: dispatchWebhookJob(payload)
         Queue->>Redis: Persist job metadata, state & payload
         API-->>Client: 202 Accepted (jobId, idempotencyKey, status: QUEUED)
     end
@@ -38,7 +38,7 @@ sequenceDiagram
     loop Asynchronous Processing (Worker Pool: Concurrency 5)
         Worker->>Redis: Poll active jobs (Rate Limit: 100 jobs/min)
         Redis-->>Worker: Fetch next ready job
-        Worker->>Proc: Invoke processReportJob(job)
+        Worker->>Proc: Invoke processWebhookJob(job)
         Proc->>DB: Check idempotencyDb.hasBeenProcessed(idempotencyKey)
         
         alt Primary Datastore Idempotency Hit (Already Processed)
@@ -74,14 +74,14 @@ sequenceDiagram
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                       EXPRESS HTTP API LAYER                                     │
 │  ┌───────────────────────┐   ┌────────────────────────┐   ┌───────────────────────────────────┐  │
-│  │  POST /api/jobs/email │   │ POST /api/jobs/report  │   │  GET /health | GET /metrics       │  │
+│  │  POST /api/jobs/email │   │ POST /api/jobs/webhook │   │  GET /health | GET /metrics       │  │
 │  └───────────┬───────────┘   └───────────┬────────────┘   └─────────────────┬─────────────────┘  │
 └──────────────│───────────────────────────│──────────────────────────────────│────────────────────┘
                │                           │                                  │
                ▼                           ▼                                  ▼
 ┌────────────────────────────────────────────────────────┐          ┌───────────────────────────┐
 │              ZOD RUNTIME SCHEMA VALIDATOR              │          │ PROMETHEUS METRICS        │
-│    (EmailJobDataSchema / ReportJobDataSchema)          │          │ (prom-client collector)   │
+│    (EmailJobDataSchema / WebhookJobDataSchema)          │          │ (prom-client collector)   │
 └──────────────────────────┬─────────────────────────────┘          └───────────────────────────┘
                            │
                            ▼
@@ -114,7 +114,7 @@ sequenceDiagram
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                  PROCESSOR REGISTRY & EXECUTION                                  │
 │  - EMAIL_NOTIFICATION ──► processEmailJob()                                                      │
-│  - REPORT_GENERATION  ──► processReportJob()                                                     │
+│  - WEBHOOK_DELIVERY   ──► processWebhookJob()                                                     │
 │  - WEBHOOK_DELIVERY   ──► processWebhookJob()   (real HTTP; genuine failures)                    │
 └──────────────────────────┬───────────────────────────────────────────────────────────────────────┘
                            │

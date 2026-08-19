@@ -10,7 +10,7 @@ import { logger, redactSecrets } from './logging/logger.js';
 import { getRedisConnection } from './config/redis.connection.js';
 import { taskQueue } from './queue/queue.js';
 import { dlqQueue } from './queue/dlq.js';
-import { dispatchEmailJob, dispatchReportJob, dispatchWebhookJob } from './queue/producer.js';
+import { dispatchEmailJob, dispatchWebhookJob } from './queue/producer.js';
 import { metricsService } from './metrics/metrics.service.js';
 import { idempotencyDb } from './storage/idempotency.db.js';
 import { requireAdminAuth } from './middleware/admin.auth.js';
@@ -74,7 +74,6 @@ export function buildApp(): Express {
         health: '/health',
         queueDashboard: '/admin/queues',
         dispatchEmailJob: 'POST /api/jobs/email',
-        dispatchReportJob: 'POST /api/jobs/report',
         dispatchWebhookJob: 'POST /api/jobs/webhook',
       },
     });
@@ -223,25 +222,6 @@ export function buildApp(): Express {
         const job = await dispatchEmailJob(req.body);
         res.status(202).json({
           message: 'Email job dispatched successfully',
-          jobId: job.id,
-          idempotencyKey: job.data.idempotencyKey,
-          status: 'QUEUED',
-        });
-      } catch (error) {
-        next(error);
-      }
-    }
-  );
-
-  app.post(
-    '/api/jobs/report',
-    globalJobLimiter,
-    perIpJobLimiter,
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        const job = await dispatchReportJob(req.body);
-        res.status(202).json({
-          message: 'Report job dispatched successfully',
           jobId: job.id,
           idempotencyKey: job.data.idempotencyKey,
           status: 'QUEUED',
