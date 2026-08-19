@@ -1,4 +1,4 @@
-# Production-Grade Task Processing System (BullMQ + Redis)
+# Task Processing System (BullMQ + Redis)
 
 ## Architectural Overview
 

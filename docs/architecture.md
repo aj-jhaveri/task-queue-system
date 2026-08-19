@@ -4,7 +4,7 @@
 
 Modern asynchronous distributed backend systems require reliable background processing decoupled from HTTP request-response cycles. When web applications perform resource-intensive operations (such as generating large PDF/Excel financial reports or sending batch transactional emails), executing these tasks synchronously inside HTTP handlers causes high latency, risk of client request timeouts, and poor user experience.
 
-This system provides a production-grade asynchronous task execution engine built with Node.js, TypeScript, BullMQ, Redis, Pino, Zod, and SQLite.
+This system provides an asynchronous task execution engine built with Node.js, TypeScript, BullMQ, Redis, Pino, Zod, and SQLite.
 
 ---
 

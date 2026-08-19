@@ -1,4 +1,4 @@
-# Production-Grade Task Processing System
+# Task Processing System
 
 [![CI](https://github.com/aj-jhaveri/task-queue-system/actions/workflows/ci.yml/badge.svg)](https://github.com/aj-jhaveri/task-queue-system/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -20,7 +20,7 @@ Asynchronous background task processing microservice built with **Node.js**, **T
 
 ## What It Is
 
-A production-grade microservice demonstrating robust background job queues, rate limiting, concurrency management, dead-letter queue (DLQ) routing, SQLite idempotency, Prometheus metrics, and real-time Bull Board observability.
+A microservice demonstrating robust background job queues, rate limiting, concurrency management, dead-letter queue (DLQ) routing, SQLite idempotency, Prometheus metrics, and real-time Bull Board observability.
 
 **Production deployment:** The system runs continuously on Render with Upstash Cloud Redis (TLS, IPv4). UptimeRobot pings `/health` every 5 minutes — no cold starts. Dispatch real jobs at [slakedesign.com/demo/queue](https://slakedesign.com/demo/queue).
 
@@ -28,7 +28,7 @@ A production-grade microservice demonstrating robust background job queues, rate
 
 ## Why It Exists
 
-Distributed backend systems require reliable execution of asynchronous side-effects (e.g., email notifications, heavy analytical report generation) isolated from client HTTP request loops. This project provides a battle-tested reference implementation addressing critical production concerns:
+Distributed backend systems require reliable execution of asynchronous side-effects (e.g., email notifications, heavy analytical report generation) isolated from client HTTP request loops. This project provides a reference implementation addressing critical production concerns:
 * **Durable Idempotency:** Blocking duplicate side-effects across Redis flushes or network retries.
 * **Resilience:** Automatic retries with exponential backoff and automatic DLQ routing.
 * **Observability:** Metrics scraping and interactive web UI for queue administration.

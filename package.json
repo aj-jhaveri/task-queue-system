@@ -1,7 +1,7 @@
 {
   "name": "task-queue-system",
   "version": "1.0.0",
-  "description": "Production-Grade Asynchronous Task Processing System built with Node.js, TypeScript, BullMQ, Redis, and Express.",
+  "description": "Asynchronous Task Processing System built with Node.js, TypeScript, BullMQ, Redis, and Express.",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {

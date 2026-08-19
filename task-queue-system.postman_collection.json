@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Task Queue System API",
-    "description": "Postman API Collection for testing the Production-Grade Task Processing System. Job payloads are validated with strict schemas: unknown fields are rejected with HTTP 400. There is no request field for forcing a job to fail.",
+    "description": "Postman API Collection for testing the Task Processing System. Job payloads are validated with strict schemas: unknown fields are rejected with HTTP 400. There is no request field for forcing a job to fail.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

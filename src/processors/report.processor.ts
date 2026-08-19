@@ -44,8 +44,12 @@ export async function processReportJob(job: Job<ReportJobData>): Promise<JobExec
     reportType,
     generatedFor: userEmail,
     appliedFilters: filters,
-    downloadUrl: `https://reports.internal/download/rpt_${Date.now()}.pdf`,
-    rowsProcessed: Math.floor(Math.random() * 5000) + 100,
+    // This processor is a stub: no report is generated and no file is written.
+    // The job's return value is readable on the public dashboard, so the
+    // synthetic row count is named for what it is and no download URL is
+    // emitted at all.
+    simulated: true,
+    simulatedRowsProcessed: Math.floor(Math.random() * 5000) + 100,
   };
 
   const durationMs = Date.now() - startTime;
