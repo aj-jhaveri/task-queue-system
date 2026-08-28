@@ -12,16 +12,30 @@ export class MetricsService {
     this.register = new client.Registry();
     client.collectDefaultMetrics({ register: this.register });
 
+    // status="success" folds in idempotent duplicates: a job short-circuited by
+    // the SQLite replay cache never ran its side-effect but still completes.
+    // That is countable separately via the isDuplicate field on the job result;
+    // it is called out here so a reader of the dashboard does not read this
+    // counter as "work performed".
     this.jobsProcessedTotal = new client.Counter({
       name: 'task_queue_jobs_processed_total',
-      help: 'Total number of task queue jobs processed',
+      help:
+        'Jobs processed. status="success" INCLUDES idempotent duplicates that were ' +
+        'short-circuited before their side-effect ran, so this is not a count of ' +
+        'work performed.',
       labelNames: ['job_type', 'status'],
       registers: [this.register],
     });
 
+    // Incremented from the worker's `failed` event, which fires once per
+    // ATTEMPT. A single job retried to exhaustion increments this three times
+    // by default. Terminal failures are countable from the DLQ, not from here -
+    // reading this as a job count overstates failures by up to the retry limit.
     this.jobsFailedTotal = new client.Counter({
       name: 'task_queue_jobs_failed_total',
-      help: 'Total number of failed task queue jobs',
+      help:
+        'Failed job ATTEMPTS, not failed jobs. A job retried to exhaustion increments ' +
+        'this once per attempt (3 by default). Count terminal failures from the DLQ.',
       labelNames: ['job_type', 'error_type'],
       registers: [this.register],
     });

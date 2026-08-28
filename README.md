@@ -159,6 +159,17 @@ task_queue_jobs_processed_total{job_type="WEBHOOK_DELIVERY",status="success"} 53
 task_queue_processing_duration_seconds_bucket{job_type="EMAIL_NOTIFICATION",le="0.1"} 89
 ```
 
+**Reading these counters correctly:**
+
+| Counter | What it actually counts |
+|---|---|
+| `task_queue_jobs_failed_total` | Failed **attempts**, not failed jobs. One job retried to exhaustion adds 3. Count terminal failures from the DLQ. |
+| `task_queue_jobs_processed_total{status="success"}` | Includes idempotent duplicates short-circuited before their side-effect ran — so it is not a count of work performed. |
+
+Both are stated in the metric `help` text as well, so the caveat travels with the
+scrape rather than living only here.
+
+
 ### 4. Structured Pino Logger Output
 ```json
 {"level":30,"time":1774569600000,"pid":1234,"env":"development","jobId":"email_key_101","idempotencyKey":"key_101","attempt":0,"msg":"Processing email job"}
@@ -254,6 +265,18 @@ curl -X POST https://slake-task-queue.onrender.com/api/jobs/email \
     "idempotencyKey": "email_demo_001"
   }'
 ```
+
+> **The email side-effect is simulated.** No SMTP provider is contacted and no
+> mail is sent; the returned `messageId` is generated locally. This job exists
+> to exercise the queue lifecycle — validation, idempotency, durable success
+> record — without requiring a vendor account, which is what lets the demo run
+> unattended.
+>
+> It is deliberately **not** the job that demonstrates retries. `WEBHOOK_DELIVERY`
+> below performs a real HTTP request, so backoff and DLQ routing rest on a real
+> failure rather than a simulation flag. The asymmetry is intentional: exactly
+> one of these two paths does real I/O, and it is the one making the reliability
+> claim.
 
 ### Dispatch Webhook Delivery Job
 
