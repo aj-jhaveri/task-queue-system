@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { EmailJobDataSchema, EmailJobData, JobExecutionResult, JOB_NAMES } from '../types/job.types.js';
+import { EmailJobRecordSchema, EmailJobData, JobExecutionResult, JOB_NAMES } from '../types/job.types.js';
 import { idempotencyDb } from '../storage/idempotency.db.js';
 import { logger } from '../logging/logger.js';
 
@@ -12,7 +12,9 @@ import { logger } from '../logging/logger.js';
  */
 export async function processEmailJob(job: Job<EmailJobData>): Promise<JobExecutionResult> {
   const startTime = Date.now();
-  const data = EmailJobDataSchema.parse(job.data);
+  // Record schema, not the public input schema: job.data carries the
+  // server-stamped correlationId, which the strict input schema would reject.
+  const data = EmailJobRecordSchema.parse(job.data);
   const { to, subject, body, idempotencyKey } = data;
 
   logger.info({ jobId: job.id, idempotencyKey, attempt: job.attemptsMade }, 'Processing email job');

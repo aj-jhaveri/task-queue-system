@@ -68,3 +68,28 @@ export interface JobExecutionResult {
   data: Record<string, unknown>;
   isDuplicate?: boolean;
 }
+
+/**
+ * Correlation ID as it travels inside a job payload.
+ *
+ * Deliberately NOT part of the public input schemas above. Those stay strict
+ * and correlationId-free, so a client that puts `correlationId` in a request
+ * body gets a 400 rather than having it silently honoured - the same posture
+ * this repo takes on `simulateFailure`. The supported way for a caller to
+ * supply their own ID is the `x-correlation-id` request header, which is
+ * normalised and length-capped by the correlation middleware.
+ *
+ * The producer stamps this field onto the payload AFTER validating client
+ * input, so the value in a job is always server-resolved and cannot be forged
+ * through the job body. Processors validate against the *Record schemas below,
+ * which are the input schemas plus this one server-owned field.
+ */
+export const CorrelationIdSchema = z.string().min(1).max(64).optional();
+
+export const EmailJobRecordSchema = EmailJobDataSchema.extend({
+  correlationId: CorrelationIdSchema,
+});
+
+export const WebhookJobRecordSchema = WebhookJobDataSchema.extend({
+  correlationId: CorrelationIdSchema,
+});

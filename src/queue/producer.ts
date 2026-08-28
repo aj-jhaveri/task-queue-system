@@ -13,6 +13,7 @@ import { config } from '../config/environment.js';
 import { logger } from '../logging/logger.js';
 import { QueueDepthExceededError, QueueUnavailableError } from '../errors/app.errors.js';
 import { invalidateDashboardSnapshot } from '../middleware/dashboard.cache.js';
+import { getCorrelationId } from '../logging/context.js';
 
 interface DepthCacheEntry {
   depth: number;
@@ -88,9 +89,15 @@ async function enqueue<T>(
 ): Promise<Job<T>> {
   await assertQueueHasCapacity();
 
+  // Stamped here rather than in each dispatch function: enqueue() is the single
+  // choke point every job type passes through, so a new job type inherits
+  // tracing without anyone remembering to add it.
+  const correlationId = getCorrelationId();
+  const payload = correlationId ? { ...data, correlationId } : data;
+
   let job: Job<T>;
   try {
-    job = await taskQueue.add(jobName, data, { jobId });
+    job = await taskQueue.add(jobName, payload, { jobId });
   } catch (err) {
     throw new QueueUnavailableError(err instanceof Error ? err.message : undefined);
   }
