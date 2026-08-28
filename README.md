@@ -388,3 +388,35 @@ Full derivation, including the Bull Board polling cost, is in
 * [Design Decisions & Engineering Tradeoffs (`docs/design_decisions.md`)](docs/design_decisions.md)
 * [Deployment & Operations (`docs/deployment.md`)](docs/deployment.md)
 * [Troubleshooting & DLQ Guide (`docs/troubleshooting.md`)](docs/troubleshooting.md)
+
+---
+
+## Design & Reliability Notes
+
+**Production-shaped.** Retry with exponential backoff and a bounded dead-letter
+queue that preserves failure reason and stack trace. Idempotency scoped to
+`(job_name, key)` with an in-place schema migration. Prometheus metrics whose
+`help` text states what they actually count. Pino logging with secret
+redaction and correlation IDs propagated from HTTP intake through the queue to
+the worker and the DLQ. Queue-depth backpressure. SSRF eliminated by design —
+webhook destinations are a closed enum mapped server-side, so no caller-supplied
+URL ever reaches the network layer.
+
+**Demo-only, and why.** The email side-effect is simulated: no SMTP provider is
+contacted. It exists to exercise the queue lifecycle without a vendor
+credential, which is what lets this run unattended. `WEBHOOK_DELIVERY` is the
+path that performs real I/O and carries the retry claim. Rate limiting is
+in-process, so it assumes a single instance. Bull Board is deliberately public
+and read-only.
+
+**What was fixed, and what it taught me.** See [HARDENING.md](HARDENING.md).
+The headline defect was an idempotency key scoped to `key` alone rather than
+`(job_name, key)`, which caused webhook deliveries to be silently dropped and
+reported as successes. The lesson that generalised: I had a plausible-sounding
+reason to deprioritise it — "BullMQ job IDs are prefixed, so collisions are
+unlikely" — and that reasoning was exactly backwards. The prefix was the
+enabling condition. A convincing argument for not fixing something deserves the
+same scrutiny as the bug.
+
+---
+
