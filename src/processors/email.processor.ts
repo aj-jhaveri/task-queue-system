@@ -37,7 +37,19 @@ export async function processEmailJob(job: Job<EmailJobData>): Promise<JobExecut
     };
   }
 
-  // 2. Email side-effect
+  // 2. Email side-effect - SIMULATED.
+  //
+  // No SMTP provider is contacted and no mail is sent. The messageId is
+  // generated locally so the idempotency record has a realistic payload to
+  // replay on a duplicate.
+  //
+  // This job exists to exercise the queue lifecycle - validation, idempotency,
+  // durable success record - without requiring a vendor account, which is what
+  // lets the deployment run unattended. It is deliberately NOT the job that
+  // demonstrates retries: WEBHOOK_DELIVERY performs a real HTTP request to a
+  // path that genuinely is not served, so backoff and DLQ routing rest on a
+  // real failure rather than on a simulation flag. The asymmetry between these
+  // two processors is intentional and is documented in the README.
   const resultData = {
     messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
     deliveredTo: to,
