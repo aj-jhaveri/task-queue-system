@@ -149,6 +149,41 @@ backoff and dead-lettering rest on a real failure rather than a simulation flag.
 
 ---
 
+## Production rollout
+
+Deployed 2026-08-28 by auto-deploy on merge to `main`. Runbook:
+[docs/deployment.md](docs/deployment.md).
+
+**What shipped:** the `(job_name, key)` idempotency fix with its in-place schema
+migration, the wired `recordFailure`, correlation IDs across HTTP → queue →
+worker → DLQ, and the corrected metric help text.
+
+**The deploy was clean** — no failed builds, no rollback. This repo already had
+the build command the other two needed
+(`npm ci --include=dev && npm run build && npm prune --omit=dev`), which is why
+it was the only one of the three that required no deploy-config work.
+
+Verified live: `/health` reports `redis`, `sqlite` and `worker` all `UP` and
+carries `x-correlation-id`; a dispatch through the Netlify proxy returns a
+`correlationId` alongside the `jobId`; and a payload carrying the removed
+`simulateFailure` field is still rejected with a 400.
+
+**What to monitor.**
+
+- `task_queue_jobs_failed_total` counts failed **attempts**, so divide by the
+  retry limit before reading it as a job count. Terminal failures are countable
+  from the DLQ, and DLQ depth is the number that actually means something is
+  wrong.
+- `task_queue_jobs_processed_total{status="success"}` includes idempotent
+  duplicates. A rising duplicate rate means clients are retrying, not that
+  throughput improved.
+- `task_queue_dashboard_snapshot_total{source="redis"}` versus `source="cache"`
+  is the Redis budget signal. A rising `redis` count means snapshots are being
+  invalidated more often than the projection in `docs/design_decisions.md`
+  assumed, and is the first place to look if the Upstash command counter climbs.
+
+---
+
 ## Method
 
 Each fix followed the same sequence, and the sequence is the point:

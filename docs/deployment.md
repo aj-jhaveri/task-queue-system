@@ -107,11 +107,18 @@ npm start
 
 ### Render Build & Start Commands
 
+Verified against the live service 2026-08-28.
+
 | Setting | Value |
 | :--- | :--- |
+| **Service ID** | `srv-d9r78q0n74is73e77sag` |
+| **URL** | https://slake-task-queue.onrender.com |
+| **Repo / branch** | `aj-jhaveri/task-queue-system` — `main` |
+| **Auto-deploy** | **on**, per commit |
 | **Build Command** | `npm ci --include=dev && npm run build && npm prune --omit=dev` |
 | **Start Command** | `npm start` |
 | **Instances** | `1` |
+| **Consumed by** | `slakedesign.com/demo/queue`, via `netlify/functions/queue-demo.js` |
 
 All three parts of the build command are load-bearing, and the reason is that
 Render compiles TypeScript on the server, in the same filesystem the application
@@ -221,3 +228,54 @@ To scale task processing throughput horizontally:
 Tweak `WORKER_CONCURRENCY` in `.env`:
 * CPU-bound tasks: Set `WORKER_CONCURRENCY` equal to available CPU cores.
 * I/O-bound tasks (network requests, DB queries): Increase `WORKER_CONCURRENCY` to `10` or `20`.
+
+---
+
+## Rollback
+
+1. **Redeploy the last good version.** Render's dashboard lists prior deploys
+   with a rollback action; the CLI equivalent is
+   `render deploys create srv-d9r78q0n74is73e77sag --commit <sha>`.
+2. **Revert the commit.** `git revert -m 1 <merge-sha>` on `main`, push, and let
+   auto-deploy carry it. Slower, but it keeps `main` and production identical.
+3. **Last resort — disable the demo link** on `slakedesign.com/demo`.
+
+A failed build is self-rollbacking: Render keeps the previous version live and
+never routes traffic to a build that did not start.
+
+Render runs the old and new instances briefly during a swap, so a request may
+still be answered by the previous version for roughly 30 seconds after a deploy
+reports `live`. Verify with a signal only the new build emits — the
+`x-correlation-id` response header served that purpose during the 2026-08-28
+rollout.
+
+## Behavioural changes deployed 2026-08-28
+
+- **Idempotency is scoped to `(job_name, key)`.** A client that relied on one key
+  suppressing a second job of a *different* type will now see both run. That
+  reliance was never sound: it silently dropped webhook deliveries and reported
+  them as successes. An existing database is migrated in place on first open.
+- **`correlationId` in a request body is rejected with a 400.** The supported
+  channel for a caller-supplied ID is the `x-correlation-id` header. The
+  resolved value is returned in the 202 response body.
+- **Terminal failures are recorded** in the idempotency store immediately
+  before DLQ routing, which is what `docs/architecture.md` had always claimed.
+
+## Smoke test after deploy
+
+```bash
+# 1. All three dependencies up, and new code serving
+curl -sD - https://slake-task-queue.onrender.com/health | grep -iE 'x-correlation-id|redis'
+
+# 2. Dispatch through the live site; response must carry correlationId
+curl -s -X POST 'https://slakedesign.com/api/queue-demo?action=dispatch_email' \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"demo@slakedesign.com","subject":"smoke","body":"b","idempotencyKey":"smoke_'$(date +%s)'"}'
+
+# 3. Strict schemas still reject a removed field (expect 400)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST 'https://slakedesign.com/api/queue-demo?action=dispatch_email' \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"a@b.com","subject":"s","body":"b","idempotencyKey":"x_'$(date +%s)'","simulateFailure":true}'
+```
+
+Then confirm the dashboard renders: https://slakedesign.com/demo/queue
