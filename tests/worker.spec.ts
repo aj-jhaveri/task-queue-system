@@ -27,6 +27,7 @@ import { closeRedisConnection } from '../src/config/redis.connection.js';
 import { taskQueue } from '../src/queue/queue.js';
 import { dlqQueue, sendToDLQ } from '../src/queue/dlq.js';
 import { WORKER_TUNING } from '../src/workers/task.worker.js';
+import { JOB_NAMES } from '../src/types/job.types.js';
 
 describe('Worker Processor & Idempotency', () => {
   beforeEach(() => {
@@ -62,8 +63,8 @@ describe('Worker Processor & Idempotency', () => {
     expect(result.idempotencyKey).toBe(key);
     expect(result.isDuplicate).toBeUndefined();
 
-    expect(idempotencyDb.hasBeenProcessed(key)).toBe(true);
-    expect(idempotencyDb.getRecord(key)?.status).toBe('COMPLETED');
+    expect(idempotencyDb.hasBeenProcessed(JOB_NAMES.EMAIL_NOTIFICATION, key)).toBe(true);
+    expect(idempotencyDb.getRecord(JOB_NAMES.EMAIL_NOTIFICATION, key)?.status).toBe('COMPLETED');
   });
 
   it('should block duplicate job processing via SQLite primary idempotency check', async () => {
@@ -117,7 +118,7 @@ describe('Worker Processor & Idempotency', () => {
       } as Job<never>;
 
       await expect(processEmailJob(mockJob)).rejects.toThrow('SQLITE_IOERR');
-      expect(idempotencyDb.hasBeenProcessed(key)).toBe(false);
+      expect(idempotencyDb.hasBeenProcessed(JOB_NAMES.EMAIL_NOTIFICATION, key)).toBe(false);
     });
 
     it('propagates a real datastore error out of the job processor', async () => {
@@ -139,7 +140,7 @@ describe('Worker Processor & Idempotency', () => {
       } as Job<never>;
 
       await expect(processEmailJob(mockJob)).rejects.toThrow('SQLITE_BUSY');
-      expect(idempotencyDb.hasBeenProcessed(key)).toBe(false);
+      expect(idempotencyDb.hasBeenProcessed(JOB_NAMES.EMAIL_NOTIFICATION, key)).toBe(false);
     });
 
     it('rejects an unregistered job name at the registry boundary', () => {

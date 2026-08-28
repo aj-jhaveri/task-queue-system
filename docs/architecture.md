@@ -52,11 +52,11 @@ sequenceDiagram
                 Proc-->>Worker: Return JobExecutionResult
                 Worker->>Redis: Mark job completed
             else Processing Failure Encountered
-                Proc-->>Worker: Throw Error (Simulated or Runtime)
-                Worker->>DB: recordFailure(idempotencyKey, jobName, errorMsg)
+                Proc-->>Worker: Throw Error (real runtime failure)
                 alt Retries Remaining (Attempts < 3)
                     Worker->>Redis: Re-queue job with exponential backoff
                 else Max Retry Attempts Exhausted (Attempts >= 3)
+                    Worker->>DB: recordFailure(idempotencyKey, jobName, errorMsg)
                     Worker->>DLQ: sendToDLQ(job, error)
                     DLQ->>Redis: Store in dlq-task-queue
                     Worker->>Redis: Mark original job failed

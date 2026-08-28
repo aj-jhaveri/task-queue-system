@@ -160,7 +160,9 @@ export function buildApp(): Express {
     }
 
     try {
-      idempotencyDb.getRecord('health_check_ping');
+      // Liveness probe only: any (job_name, key) pair exercises the prepared
+      // statement and the file handle. It is never expected to return a row.
+      idempotencyDb.getRecord('HEALTH_CHECK', 'health_check_ping');
       dbStatus = 'UP';
     } catch (err) {
       logger.error(

@@ -6,6 +6,7 @@ import { logger } from '../logging/logger.js';
 import { getProcessorForJob } from '../processors/registry.js';
 import { metricsService } from '../metrics/metrics.service.js';
 import { sendToDLQ } from '../queue/dlq.js';
+import { idempotencyDb } from '../storage/idempotency.db.js';
 import { JobExecutionResult } from '../types/job.types.js';
 import { invalidateDashboardSnapshot } from '../middleware/dashboard.cache.js';
 
@@ -94,8 +95,25 @@ export function initializeTaskWorker(): Worker {
       `Worker job execution failed (attempt ${attemptsMade}/${maxAttempts})`
     );
 
-    // If all attempts are exhausted, route to DLQ
+    // If all attempts are exhausted, record the terminal failure and route to DLQ
     if (job && attemptsMade >= maxAttempts) {
+      // Terminal failures only. Recording on every attempt would mark a job
+      // FAILED while a retry is still pending, and a later success would then
+      // have to correct a record that should never have existed.
+      const failedKey = (job.data as { idempotencyKey?: string })?.idempotencyKey;
+      if (failedKey) {
+        try {
+          idempotencyDb.recordFailure(failedKey, job.name, err.message);
+        } catch (recordErr) {
+          // A failed bookkeeping write must not prevent DLQ routing, which is
+          // the mechanism that actually preserves the job.
+          logger.error(
+            { jobId: job.id, errMessage: recordErr instanceof Error ? recordErr.message : 'Unknown error' },
+            'Failed to record terminal failure in idempotency store'
+          );
+        }
+      }
+
       try {
         await sendToDLQ(job, err);
       } catch (dlqErr) {

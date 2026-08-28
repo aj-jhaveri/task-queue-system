@@ -13,6 +13,7 @@ import express from 'express';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 import type { Job } from 'bullmq';
+import { JOB_NAMES } from '../src/types/job.types.js';
 
 // Bind first so the sink can run on exactly the port the processor will resolve.
 // Routes are registered after listen(), which Express supports, so there is no
@@ -159,7 +160,7 @@ describe('Delivery against an unavailable dependency', () => {
       processWebhookJob(buildJob({ destination: 'DEMO_UNAVAILABLE', idempotencyKey: key }))
     ).rejects.toThrow();
 
-    expect(idempotencyDb.hasBeenProcessed(key)).toBe(false);
+    expect(idempotencyDb.hasBeenProcessed(JOB_NAMES.WEBHOOK_DELIVERY, key)).toBe(false);
   });
 
   it('surfaces a transport failure as a retryable error', async () => {
@@ -182,5 +183,78 @@ describe('Delivery against an unavailable dependency', () => {
     await expect(processWebhookJob(buildJob())).rejects.toThrow(/transport level/);
 
     fetchSpy.mockRestore();
+  });
+});
+
+/**
+ * Cross-job-type idempotency collision.
+ *
+ * The idempotency table used to be keyed on `key` alone, and hasBeenProcessed()
+ * ignored job_name even though the column existed. Clients pick their own
+ * idempotency keys, and the producer prefixes BullMQ jobIds by type
+ * (`email_<key>` / `webhook_<key>`), so two jobs sharing a business identifier
+ * are distinct jobs that BOTH enqueue and BOTH reach a processor. The prefix is
+ * what made the collision reachable, not what prevented it.
+ *
+ * The consequence was not a cosmetic wrong-return-value: the webhook
+ * short-circuited before fetch(), so no HTTP request was made at all, and the
+ * job reported success for a delivery that never happened. Silent delivery loss
+ * counted as a success in both the API response and the metrics.
+ */
+describe('Idempotency is scoped by job type', () => {
+  it('delivers a webhook whose key was already used by an email job', async () => {
+    const sharedKey = `shared_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    // An email job completes first and writes its COMPLETED record.
+    idempotencyDb.recordSuccess(sharedKey, JOB_NAMES.EMAIL_NOTIFICATION, {
+      messageId: 'msg_from_email_job',
+    });
+
+    const before = sinkHits;
+    const result = await processWebhookJob(
+      buildJob({ destination: 'DEMO_AVAILABLE', idempotencyKey: sharedKey }) as never
+    );
+
+    // The invariant: the webhook must actually go out over the wire.
+    expect(sinkHits).toBe(before + 1);
+    expect(result.isDuplicate).toBeUndefined();
+    expect(result.data).toMatchObject({ httpStatus: 200 });
+    // And it must not have replayed the email job's payload.
+    expect(JSON.stringify(result.data)).not.toContain('msg_from_email_job');
+  });
+
+  it('keeps both records independently under one shared key', () => {
+    const sharedKey = `shared_rec_${Date.now()}`;
+
+    idempotencyDb.recordSuccess(sharedKey, JOB_NAMES.EMAIL_NOTIFICATION, { side: 'email' });
+    idempotencyDb.recordSuccess(sharedKey, JOB_NAMES.WEBHOOK_DELIVERY, { side: 'webhook' });
+
+    // Under the legacy single-column key the second write would have
+    // overwritten the first via ON CONFLICT(key).
+    expect(idempotencyDb.getRecord(JOB_NAMES.EMAIL_NOTIFICATION, sharedKey)?.result_json)
+      .toContain('email');
+    expect(idempotencyDb.getRecord(JOB_NAMES.WEBHOOK_DELIVERY, sharedKey)?.result_json)
+      .toContain('webhook');
+
+    expect(idempotencyDb.hasBeenProcessed(JOB_NAMES.EMAIL_NOTIFICATION, sharedKey)).toBe(true);
+    expect(idempotencyDb.hasBeenProcessed(JOB_NAMES.WEBHOOK_DELIVERY, sharedKey)).toBe(true);
+  });
+
+  it('still short-circuits a genuine same-type duplicate', async () => {
+    const key = `dupe_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    const first = await processWebhookJob(
+      buildJob({ destination: 'DEMO_AVAILABLE', idempotencyKey: key }) as never
+    );
+    expect(first.isDuplicate).toBeUndefined();
+
+    const before = sinkHits;
+    const second = await processWebhookJob(
+      buildJob({ destination: 'DEMO_AVAILABLE', idempotencyKey: key }) as never
+    );
+
+    // Scoping must not weaken same-type deduplication: no second delivery.
+    expect(second.isDuplicate).toBe(true);
+    expect(sinkHits).toBe(before);
   });
 });

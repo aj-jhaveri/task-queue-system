@@ -18,8 +18,8 @@ export async function processEmailJob(job: Job<EmailJobData>): Promise<JobExecut
   logger.info({ jobId: job.id, idempotencyKey, attempt: job.attemptsMade }, 'Processing email job');
 
   // 1. Primary datastore idempotency check
-  if (idempotencyDb.hasBeenProcessed(idempotencyKey)) {
-    const existing = idempotencyDb.getRecord(idempotencyKey);
+  if (idempotencyDb.hasBeenProcessed(JOB_NAMES.EMAIL_NOTIFICATION, idempotencyKey)) {
+    const existing = idempotencyDb.getRecord(JOB_NAMES.EMAIL_NOTIFICATION, idempotencyKey);
     logger.warn(
       { jobId: job.id, idempotencyKey },
       'Duplicate job execution blocked by SQLite primary datastore idempotency check'
