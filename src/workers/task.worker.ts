@@ -9,6 +9,7 @@ import { sendToDLQ } from '../queue/dlq.js';
 import { idempotencyDb } from '../storage/idempotency.db.js';
 import { JobExecutionResult } from '../types/job.types.js';
 import { invalidateDashboardSnapshot } from '../middleware/dashboard.cache.js';
+import { runWithCorrelationId } from '../logging/context.js';
 
 let taskWorkerInstance: Worker | null = null;
 
@@ -45,8 +46,19 @@ export function initializeTaskWorker(): Worker {
   taskWorkerInstance = new Worker(
     TASK_QUEUE_NAME,
     async (job: Job) => {
-      const processor = getProcessorForJob(job.name);
-      return await processor(job);
+      // The AsyncLocalStorage scope opened by the HTTP request is long gone -
+      // the worker runs in a different tick, often a different process. The ID
+      // travelled inside the job payload; this re-establishes the scope around
+      // the whole execution so processor logs, the failure handler and the DLQ
+      // write all carry it. Falling back to the jobId means a job enqueued
+      // outside a request is still traceable, just not back to an HTTP call.
+      const correlationId =
+        (job.data as { correlationId?: string })?.correlationId ?? `job-${job.id}`;
+
+      return await runWithCorrelationId(correlationId, async () => {
+        const processor = getProcessorForJob(job.name);
+        return await processor(job);
+      });
     },
     {
       connection: getRedisOptions(),
@@ -76,6 +88,12 @@ export function initializeTaskWorker(): Worker {
   });
 
   taskWorkerInstance.on('failed', async (job: Job | undefined, err: Error) => {
+    // Event handlers fire outside the processor's scope, so re-enter it here or
+    // the failure and DLQ lines - the ones an operator actually greps for -
+    // would be the only untagged lines on the path.
+    const failCorrelationId =
+      (job?.data as { correlationId?: string })?.correlationId ?? `job-${job?.id}`;
+    return runWithCorrelationId(failCorrelationId, async () => {
     invalidateDashboardSnapshot();
 
     const jobName = job?.name || 'unknown';
@@ -123,6 +141,7 @@ export function initializeTaskWorker(): Worker {
         );
       }
     }
+    });
   });
 
   taskWorkerInstance.on('error', (err: Error) => {

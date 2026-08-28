@@ -1,5 +1,6 @@
 import pino from 'pino';
 import { config } from '../config/environment.js';
+import { getCorrelationId } from './context.js';
 
 /**
  * Strips credentials out of anything that looks like a connection URL, plus bare
@@ -51,6 +52,14 @@ export const logger = pino({
       'headers.authorization',
     ],
     censor: '[REDACTED]',
+  },
+  // Attaches the active correlation ID to every log line without any call site
+  // having to pass it. A log statement inside a processor three layers deep is
+  // tagged identically to the intake log line, which is what makes the HTTP ->
+  // queue -> worker -> DLQ path traceable as one unit.
+  mixin() {
+    const correlationId = getCorrelationId();
+    return correlationId ? { correlationId } : {};
   },
   formatters: {
     log(object) {

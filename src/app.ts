@@ -20,6 +20,7 @@ import { dashboardReadOnlyGuard, blockRedisStatsRoute } from './middleware/dashb
 import { dashboardSnapshotCache, setDashboardQueueNames } from './middleware/dashboard.cache.js';
 import { WEBHOOK_SINK_PATH, WEBHOOK_UNAVAILABLE_PATH } from './processors/webhook.processor.js';
 import { QueueDepthExceededError, QueueUnavailableError } from './errors/app.errors.js';
+import { correlationMiddleware, getCorrelationId } from './logging/context.js';
 
 /**
  * Bull Board client polling interval, in seconds.
@@ -59,6 +60,11 @@ export function buildApp(): Express {
       crossOriginEmbedderPolicy: false,
     })
   );
+
+  // First in the chain, before any handler that logs. Everything downstream -
+  // including the error boundary and the rate limiters - then runs inside a
+  // correlation scope, so there is no window where a log line is untagged.
+  app.use(correlationMiddleware);
 
   app.use(corsMiddleware);
   app.use(express.json({ limit: config.JSON_BODY_LIMIT }));
@@ -226,6 +232,9 @@ export function buildApp(): Express {
           message: 'Email job dispatched successfully',
           jobId: job.id,
           idempotencyKey: job.data.idempotencyKey,
+          // Handed back so a caller can quote it in a bug report and have the
+          // whole intake -> queue -> worker -> DLQ path found from one grep.
+          correlationId: getCorrelationId(),
           status: 'QUEUED',
         });
       } catch (error) {
@@ -246,6 +255,7 @@ export function buildApp(): Express {
           jobId: job.id,
           idempotencyKey: job.data.idempotencyKey,
           destination: job.data.destination,
+          correlationId: getCorrelationId(),
           status: 'QUEUED',
         });
       } catch (error) {

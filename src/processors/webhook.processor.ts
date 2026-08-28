@@ -1,6 +1,6 @@
 import { Job } from 'bullmq';
 import {
-  WebhookJobDataSchema,
+  WebhookJobRecordSchema,
   WebhookJobData,
   WebhookDestination,
   JobExecutionResult,
@@ -44,7 +44,9 @@ export function resolveWebhookDestination(destination: WebhookDestination): stri
  */
 export async function processWebhookJob(job: Job<WebhookJobData>): Promise<JobExecutionResult> {
   const startTime = Date.now();
-  const data = WebhookJobDataSchema.parse(job.data);
+  // Record schema, not the public input schema: job.data carries the
+  // server-stamped correlationId, which the strict input schema would reject.
+  const data = WebhookJobRecordSchema.parse(job.data);
   const { destination, event, payload, idempotencyKey } = data;
 
   logger.info(
