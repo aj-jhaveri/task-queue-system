@@ -52,8 +52,8 @@ export async function processWebhookJob(job: Job<WebhookJobData>): Promise<JobEx
     'Processing webhook delivery job'
   );
 
-  if (idempotencyDb.hasBeenProcessed(idempotencyKey)) {
-    const existing = idempotencyDb.getRecord(idempotencyKey);
+  if (idempotencyDb.hasBeenProcessed(JOB_NAMES.WEBHOOK_DELIVERY, idempotencyKey)) {
+    const existing = idempotencyDb.getRecord(JOB_NAMES.WEBHOOK_DELIVERY, idempotencyKey);
     logger.warn(
       { jobId: job.id, idempotencyKey },
       'Duplicate job execution blocked by SQLite primary datastore idempotency check'
