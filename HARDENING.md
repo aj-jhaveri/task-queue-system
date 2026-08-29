@@ -134,18 +134,43 @@ backoff and dead-lettering rest on a real failure rather than a simulation flag.
 
 ---
 
-## What is still demo-grade, deliberately
+## Architectural trade-offs and known gaps
 
-- **Email is simulated.** Above. A real provider behind a feature flag is the
-  obvious next step; it was not taken because it adds a credential to a
-  deployment whose value is that it runs unattended.
-- **Single instance.** HTTP rate limiting is in process memory. Multi-instance
-  would need a shared store.
-- **Bull Board is unauthenticated and read-only.** A deliberate public surface,
-  guarded by `dashboardReadOnlyGuard` and a snapshot cache rather than by auth.
-- **Redis budget tuning is calibrated to one host.** The `drainDelay` /
-  `stalledInterval` values are load-bearing for the Upstash free tier and are
-  documented as such; they are not general-purpose defaults.
+Kept separate on purpose. The first group are choices made knowingly, with a
+reason. The second are things that are simply not done. Filing the second under
+the first would be the kind of framing this repository's audit removed.
+
+### Deliberate trade-offs
+
+- **Email is simulated.** No SMTP provider is contacted. A real provider behind
+  a feature flag is the obvious next step and was not taken, because it adds a
+  credential to a deployment whose entire value is that it runs unattended.
+  `WEBHOOK_DELIVERY` is the path that performs real I/O, so the retry and DLQ
+  claims rest on real network failures rather than on this job.
+- **Bull Board is unauthenticated and read-only.** A deliberate public surface:
+  the dashboard is the demo. It is guarded by `dashboardReadOnlyGuard` and a
+  snapshot cache rather than by auth, so a visitor can watch the queue without
+  being able to touch it and without draining the Redis command budget.
+- **Redis worker tuning is calibrated to one host.** `drainDelay` and
+  `stalledInterval` are load-bearing for the Upstash free tier, taking idle cost
+  from roughly 37,000 commands/day to 3,200. They are correct for this
+  deployment and are not general-purpose defaults; `docs/design_decisions.md`
+  carries the arithmetic.
+- **Single instance.** HTTP rate limiting lives in process memory, which is
+  correct for one instance and wrong for two. A shared store is the fix, and is
+  not needed until this scales horizontally.
+
+### Known gaps
+
+- **No end-to-end test crosses the real worker boundary.** The processors are
+  tested directly and the producer is tested against real Redis, but no test
+  enqueues a job, lets the deployed worker pick it up, and asserts on the
+  result. The correlation-ID test simulates the worker's scope re-entry rather
+  than observing it. This is the gap most likely to hide a real defect.
+- **DLQ entries are never drained or replayed.** They accumulate under a bounded
+  retention policy and are inspectable in the dashboard, but there is no
+  operator path to retry one. For a demo that is fine; for a queue claiming
+  reliability it is the obvious missing verb.
 
 ---
 
