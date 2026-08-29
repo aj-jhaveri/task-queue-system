@@ -1,9 +1,9 @@
 # Hardening Log
 
 This repository was audited, found to have real defects, and remediated. This
-file records what was wrong, what changed, and what it cost — because a portfolio
-project that claims production discipline should be able to show its own bug
-history rather than only its best state.
+file records what was wrong, what changed, and what it cost, because a
+portfolio project that claims production discipline should be able to show its
+own bug history rather than only its best state.
 
 Every item below is traceable to a commit and covered by a test that fails if
 the fix is reverted.
@@ -19,7 +19,7 @@ The idempotency table was keyed on `key TEXT PRIMARY KEY`, and
 was populated.
 
 Clients choose their own idempotency keys, and nothing stops the same business
-identifier — an order id — being reused across job types. The producer prefixes
+identifier (an order id) being reused across job types. The producer prefixes
 BullMQ job IDs by type (`email_<key>`, `webhook_<key>`), so two jobs sharing a
 client key are **two distinct jobs that both enqueue and both reach a
 processor**. The prefix is precisely what made the collision reachable.
@@ -46,7 +46,7 @@ guarantee. `migrateIfLegacySchema()` rebuilds the table in place, and
 
 **Proof:** the collision tests were run against the pre-fix `src/` and fail.
 The central assertion is on the delivery sink's hit count, not the return
-value — the bug was that no HTTP request happened, and a test checking only the
+value; the bug was that no HTTP request happened, and a test checking only the
 response shape would have passed while deliveries were still being dropped.
 
 **What it taught me:** the audit I was working from called this "low probability,
@@ -61,16 +61,16 @@ deprioritise a bug is worth checking as carefully as the bug.
 `recordFailure()` had exactly one reference in the repository: its own
 definition. The `FAILED` status was unreachable.
 
-It was not merely unused. `docs/architecture.md` documented
-`Worker->>DB: recordFailure(...)` as part of the failure path — the diagram
-described a control flow the system did not perform. The adjacent line still
-read `Throw Error (Simulated or Runtime)`, stale text referring to the
-`simulateFailure` switch this repo removed and has regression tests against.
+It was not merely unused. `docs/architecture.md` documented `Worker->>DB:
+recordFailure(...)` as part of the failure path; the diagram described a
+control flow the system did not perform. The adjacent line still read `Throw
+Error (Simulated or Runtime)`, stale text referring to the `simulateFailure`
+switch this repo removed and has regression tests against.
 
 Given the choice between deleting the method and honouring the diagram,
 honouring it was better: a terminal failure record is genuinely useful, and it
 makes the document true rather than shorter. It now fires only when
-`attemptsMade >= maxAttempts`, immediately before DLQ routing — recording
+`attemptsMade >= maxAttempts`, immediately before DLQ routing, recording
 per-attempt would mark a job `FAILED` while a retry was still pending.
 
 ---
@@ -85,7 +85,7 @@ user's bug report, no way forward to the job.
 `[A-Za-z0-9_-]` only, discarded rather than repaired if it survives nothing),
 generated when absent, echoed on the response and in the 202 body, carried on
 the job payload across the process boundary, and re-entered in **both** the
-worker's processor callback and its `failed` handler — event handlers fire
+worker's processor callback and its `failed` handler, event handlers fire
 outside the processor's scope, so without that the failure and DLQ lines would
 have been the only untagged lines on the path.
 
@@ -93,11 +93,11 @@ A Pino `mixin()` attaches it to every log line, so no call site changed.
 
 **Design note worth stating:** `correlationId` is deliberately *not* in the
 public job schemas. Those stay `.strict()` and correlation-free, so a client
-putting it in a request body gets a 400 — the same posture this repo takes on
-`simulateFailure`. An earlier draft of the change added it to the public schemas,
-which would have let a caller forge one through the job body while the doc
-comment claimed they could not. The `*RecordSchema` split is what makes
-"server-resolved, cannot be forged" actually true.
+putting it in a request body gets a 400, the same posture this repo takes on
+`simulateFailure`. An earlier draft of the change added it to the public
+schemas, which would have let a caller forge one through the job body while
+the doc comment claimed they could not. The `*RecordSchema` split is what
+makes "server-resolved, cannot be forged" actually true.
 
 ---
 
@@ -108,7 +108,7 @@ telemetry is the specific failure this repo has already been burned by.
 
 | Counter | Was read as | Actually counts |
 |---|---|---|
-| `jobs_failed_total` | failed jobs | failed **attempts** — one job retried to exhaustion adds 3 |
+| `jobs_failed_total` | failed jobs | failed **attempts**; one job retried to exhaustion adds 3 |
 | `jobs_processed_total{status="success"}` | work performed | includes idempotent duplicates that never ran their side-effect |
 
 Both caveats now live in the metric `help` text, so they travel with the scrape
@@ -158,10 +158,10 @@ Deployed 2026-08-28 by auto-deploy on merge to `main`. Runbook:
 migration, the wired `recordFailure`, correlation IDs across HTTP → queue →
 worker → DLQ, and the corrected metric help text.
 
-**The deploy was clean** — no failed builds, no rollback. This repo already had
-the build command the other two needed
-(`npm ci --include=dev && npm run build && npm prune --omit=dev`), which is why
-it was the only one of the three that required no deploy-config work.
+**The deploy was clean**; no failed builds, no rollback. This repo already had
+the build command the other two needed (`npm ci --include=dev && npm run build
+&& npm prune --omit=dev`), which is why it was the only one of the three that
+required no deploy-config work.
 
 Verified live: `/health` reports `redis`, `sqlite` and `worker` all `UP` and
 carries `x-correlation-id`; a dispatch through the Netlify proxy returns a
@@ -191,7 +191,7 @@ Each fix followed the same sequence, and the sequence is the point:
 1. Write the guard first and **run it against the unfixed code** to watch it
    fail. A check that cannot fail is not evidence.
 2. Change the code.
-3. Enumerate the blast radius from the typechecker rather than from memory —
+3. Enumerate the blast radius from the typechecker rather than from memory ,
    the idempotency signature change surfaced six call sites, including one in a
    health probe that no test covered.
 4. Update the documentation in the same branch. Docs are part of the contract;
