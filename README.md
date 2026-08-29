@@ -8,13 +8,15 @@
 **Live queue dashboard:** [slake-task-queue.onrender.com/admin/queues](https://slake-task-queue.onrender.com/admin/queues)
 
 > The dashboard is public and read-only. Dispatch a job from the demo page, then
-> watch it move through the queue — no credentials required. Every mutating route
+> watch it move through the queue, no credentials required. Every mutating route
 > is refused at the middleware layer, so queue state cannot be altered through it.
 > See [SECURITY.md](SECURITY.md) for the boundary and
 > [docs/design_decisions.md](docs/design_decisions.md) for how an always-on public
 > dashboard is kept inside a free Redis tier's command budget.
 
-Asynchronous background task processing microservice built with **Node.js**, **TypeScript**, **BullMQ**, **Redis**, **Express**, **Pino**, **Zod**, and **SQLite** — deployed on **Render** with **Upstash Cloud Redis**.
+Asynchronous background task processing microservice built with **Node.js**,
+**TypeScript**, **BullMQ**, **Redis**, **Express**, **Pino**, **Zod**, and
+**SQLite**, deployed on **Render** with **Upstash Cloud Redis**.
 
 ---
 
@@ -22,7 +24,10 @@ Asynchronous background task processing microservice built with **Node.js**, **T
 
 A microservice demonstrating robust background job queues, rate limiting, concurrency management, dead-letter queue (DLQ) routing, SQLite idempotency, Prometheus metrics, and real-time Bull Board observability.
 
-**Production deployment:** The system runs continuously on Render with Upstash Cloud Redis (TLS, IPv4). UptimeRobot pings `/health` every 5 minutes — no cold starts. Dispatch real jobs at [slakedesign.com/demo/queue](https://slakedesign.com/demo/queue).
+**Production deployment:** The system runs continuously on Render with Upstash
+Cloud Redis (TLS, IPv4). UptimeRobot pings `/health` every 5 minutes, no cold
+starts. Dispatch real jobs at
+[slakedesign.com/demo/queue](https://slakedesign.com/demo/queue).
 
 **Real work only.** This system has no mechanism for forcing a job to fail. Retries, exponential backoff, and DLQ routing are driven by genuine processor errors, not by a request field. See [docs/security-remediation.md](docs/security-remediation.md) for the Redis command-budget analysis behind the worker tuning.
 
@@ -86,7 +91,7 @@ BullMQ Queue ──► Upstash Cloud Redis (rediss://, TLS)
 * **Selected BullMQ** for native TypeScript typing, non-blocking Node.js integration, built-in rate-limiting, exponential retries, and zero-overhead local Docker development.
 
 ### Upstash Cloud Redis vs. Self-Hosted
-* **Upstash** provides a serverless Redis with REST and TCP endpoints, free tier, and global availability — ideal for a portfolio deployment that stays warm with no ops overhead. TCP connection with ioredis requires explicit `host`/`port`/`password` parsing from the `REDIS_URL` and `family: 4` (IPv4) for Node 24 compatibility.
+* **Upstash** provides a serverless Redis with REST and TCP endpoints, free tier, and global availability, ideal for a portfolio deployment that stays warm with no ops overhead. TCP connection with ioredis requires explicit `host`/`port`/`password` parsing from the `REDIS_URL` and `family: 4` (IPv4) for Node 24 compatibility.
 
 ### SQLite as Idempotency Store
 * Used **SQLite** to demonstrate durable side-effect deduplication (`idempotencyKey`) across Redis restarts without requiring a full PostgreSQL deployment.
@@ -164,7 +169,7 @@ task_queue_processing_duration_seconds_bucket{job_type="EMAIL_NOTIFICATION",le="
 | Counter | What it actually counts |
 |---|---|
 | `task_queue_jobs_failed_total` | Failed **attempts**, not failed jobs. One job retried to exhaustion adds 3. Count terminal failures from the DLQ. |
-| `task_queue_jobs_processed_total{status="success"}` | Includes idempotent duplicates short-circuited before their side-effect ran — so it is not a count of work performed. |
+| `task_queue_jobs_processed_total{status="success"}` | Includes idempotent duplicates short-circuited before their side-effect ran, so it is not a count of work performed. |
 
 Both are stated in the metric `help` text as well, so the caveat travels with the
 scrape rather than living only here.
@@ -268,8 +273,8 @@ curl -X POST https://slake-task-queue.onrender.com/api/jobs/email \
 
 > **The email side-effect is simulated.** No SMTP provider is contacted and no
 > mail is sent; the returned `messageId` is generated locally. This job exists
-> to exercise the queue lifecycle — validation, idempotency, durable success
-> record — without requiring a vendor account, which is what lets the demo run
+> to exercise the queue lifecycle, validation, idempotency, durable success
+> record, without requiring a vendor account, which is what lets the demo run
 > unattended.
 >
 > It is deliberately **not** the job that demonstrates retries. `WEBHOOK_DELIVERY`
@@ -291,10 +296,11 @@ curl -X POST https://slake-task-queue.onrender.com/api/jobs/webhook \
 ```
 
 This is the retry demonstration, and it contains no simulation. The processor
-performs a real HTTP `POST`; `DEMO_UNAVAILABLE` resolves to a loopback path that is
-deliberately not served, so the delivery genuinely fails. BullMQ then applies its
-real retry policy — 3 attempts with exponential backoff — and routes the exhausted
-job to `dlq-task-queue`, where it is visible in the public dashboard.
+performs a real HTTP `POST`; `DEMO_UNAVAILABLE` resolves to a loopback path
+that is deliberately not served, so the delivery genuinely fails. BullMQ then
+applies its real retry policy (3 attempts with exponential backoff), and
+routes the exhausted job to `dlq-task-queue`, where it is visible in the
+public dashboard.
 
 `destination` is an enum, never a URL. Callers select a *name* and the service maps
 it to an address internally, so there is no input that can point this job at
@@ -305,9 +311,9 @@ metadata endpoints, internal hosts, or third parties.
 | `DEMO_AVAILABLE` | Delivers to a loopback sink that returns `200`. Job succeeds |
 | `DEMO_UNAVAILABLE` | Target path is not served. Job fails for real, retries 3×, then lands in the DLQ |
 
-Payload schemas are strict: unknown fields are rejected with `400`. There is no
-request field that can force a job to fail — failure comes from the dependency,
-not from the request.
+Payload schemas are strict: unknown fields are rejected with `400`. There is
+no request field that can force a job to fail; failure comes from the
+dependency, not from the request.
 
 ### Response Codes
 
@@ -334,12 +340,12 @@ curl https://slake-task-queue.onrender.com/health
 
 | Variable | Description |
 |---|---|
-| `REDIS_URL` | Full Upstash Cloud Redis connection string. Copy the TCP URL from Upstash's **Redis** connect tab (`redis://default:<password>@<host>.upstash.io:6379`), not the REST URL — the REST URL carries no password and fails authentication silently |
+| `REDIS_URL` | Full Upstash Cloud Redis connection string. Copy the TCP URL from Upstash's **Redis** connect tab (`redis://default:<password>@<host>.upstash.io:6379`), not the REST URL, the REST URL carries no password and fails authentication silently |
 | `NODE_ENV` | Set to `production` |
 | `PORT` | HTTP server port (Render sets this automatically) |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated browser origin allowlist. Wildcards are ignored |
 
-**Optional — admin credentials**
+**Optional, admin credentials**
 
 | Variable | Description |
 |---|---|
@@ -369,11 +375,12 @@ rather than serving unauthenticated; nothing else is affected.
 
 ### Redis Command Budget
 
-Upstash's free tier allows 500,000 commands/month (~16,667/day). BullMQ's stock
-worker defaults cost roughly **37,440 commands/day while completely idle** — about
-225% of the monthly cap before a single job is submitted. The tuned defaults above
-reduce idle consumption to roughly **3,168 commands/day (~95,040/month, ~19% of
-cap)** without affecting job pickup latency, retry timing, or DLQ behavior.
+Upstash's free tier allows 500,000 commands/month (~16,667/day). BullMQ's
+stock worker defaults cost roughly **37,440 commands/day while completely
+idle**, about 225% of the monthly cap before a single job is submitted. The
+tuned defaults above reduce idle consumption to roughly **3,168 commands/day
+(~95,040/month, ~19% of cap)** without affecting job pickup latency, retry
+timing, or DLQ behavior.
 
 Full derivation, including the Bull Board polling cost, is in
 [docs/security-remediation.md](docs/security-remediation.md).
@@ -393,14 +400,14 @@ Full derivation, including the Bull Board polling cost, is in
 
 ## Design & Reliability Notes
 
-**Production-shaped.** Retry with exponential backoff and a bounded dead-letter
-queue that preserves failure reason and stack trace. Idempotency scoped to
-`(job_name, key)` with an in-place schema migration. Prometheus metrics whose
-`help` text states what they actually count. Pino logging with secret
-redaction and correlation IDs propagated from HTTP intake through the queue to
-the worker and the DLQ. Queue-depth backpressure. SSRF eliminated by design —
-webhook destinations are a closed enum mapped server-side, so no caller-supplied
-URL ever reaches the network layer.
+**Production-shaped.** Retry with exponential backoff and a bounded
+dead-letter queue that preserves failure reason and stack trace. Idempotency
+scoped to `(job_name, key)` with an in-place schema migration. Prometheus
+metrics whose `help` text states what they actually count. Pino logging with
+secret redaction and correlation IDs propagated from HTTP intake through the
+queue to the worker and the DLQ. Queue-depth backpressure. SSRF eliminated by
+design, webhook destinations are a closed enum mapped server-side, so no
+caller-supplied URL ever reaches the network layer.
 
 **Demo-only, and why.** The email side-effect is simulated: no SMTP provider is
 contacted. It exists to exercise the queue lifecycle without a vendor
@@ -413,10 +420,10 @@ and read-only.
 The headline defect was an idempotency key scoped to `key` alone rather than
 `(job_name, key)`, which caused webhook deliveries to be silently dropped and
 reported as successes. The lesson that generalised: I had a plausible-sounding
-reason to deprioritise it — "BullMQ job IDs are prefixed, so collisions are
-unlikely" — and that reasoning was exactly backwards. The prefix was the
-enabling condition. A convincing argument for not fixing something deserves the
-same scrutiny as the bug.
+reason to deprioritise it ("BullMQ job IDs are prefixed, so collisions are
+unlikely"), and that reasoning was exactly backwards. The prefix was the
+enabling condition. A convincing argument for not fixing something deserves
+the same scrutiny as the bug.
 
 ---
 

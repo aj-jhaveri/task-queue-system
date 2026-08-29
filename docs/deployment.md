@@ -25,7 +25,7 @@ cp .env.example .env
 | `REDIS_PASSWORD` | *Empty* | No | Redis authentication password (recommended for production) |
 | `BULLBOARD_USER` | *Empty* | No | Username for `/metrics` **only**. The queue dashboard is public and read-only and does not use it. `/metrics` fails closed if unset |
 | `BULLBOARD_PASSWORD` | *Empty* | No | Password for `/metrics`. Never commit a real value |
-| `DASHBOARD_SNAPSHOT_TTL_MS` | `900000` | No | Idle backstop for the dashboard snapshot cache. **Load-bearing for the Redis command budget.** Not the refresh rate — real events invalidate immediately |
+| `DASHBOARD_SNAPSHOT_TTL_MS` | `900000` | No | Idle backstop for the dashboard snapshot cache. **Load-bearing for the Redis command budget.** Not the refresh rate, real events invalidate immediately |
 | `DASHBOARD_POLL_INTERVAL_SECONDS` | `10` | No | Forced Bull Board UI poll interval. Safe to keep low because polls are served from the snapshot cache |
 | `DASHBOARD_MAX_CACHE_ENTRIES` | `64` | No | Snapshot cache entry ceiling; bounds memory when many distinct views are in use |
 | `DASHBOARD_MAX_REFRESHES_PER_WINDOW` | `60` | No | Global ceiling on snapshot rebuilds across **all** callers. **Load-bearing for the Redis command budget.** Past it, the last snapshot for that view is served stale rather than refreshed |
@@ -113,7 +113,7 @@ Verified against the live service 2026-08-28.
 | :--- | :--- |
 | **Service ID** | `srv-d9r78q0n74is73e77sag` |
 | **URL** | https://slake-task-queue.onrender.com |
-| **Repo / branch** | `aj-jhaveri/task-queue-system` — `main` |
+| **Repo / branch** | `aj-jhaveri/task-queue-system`, `main` |
 | **Auto-deploy** | **on**, per commit |
 | **Build Command** | `npm ci --include=dev && npm run build && npm prune --omit=dev` |
 | **Start Command** | `npm start` |
@@ -124,28 +124,29 @@ All three parts of the build command are load-bearing, and the reason is that
 Render compiles TypeScript on the server, in the same filesystem the application
 then runs in.
 
-**`--include=dev`** — `NODE_ENV=production` makes npm set `omit=dev`, which strips
-the `devDependencies`. But `typescript` and the `@types/*` packages are exactly what
-`tsc` needs to compile. Without this flag the build fails with dozens of
-`TS2591: Cannot find name 'process'` and `TS7016: Could not find a declaration file`
-errors. It is not obvious from the error output that the cause is an environment
-variable rather than a missing dependency.
+**`--include=dev`**; `NODE_ENV=production` makes npm set `omit=dev`, which
+strips the `devDependencies`. But `typescript` and the `@types/*` packages are
+exactly what `tsc` needs to compile. Without this flag the build fails with
+dozens of `TS2591: Cannot find name 'process'` and `TS7016: Could not find a
+declaration file` errors. It is not obvious from the error output that the
+cause is an environment variable rather than a missing dependency.
 
-**`npm ci` rather than `npm install`** — this one is not stylistic. Render restores a
-cached `node_modules` between deploys, and `npm install` leaves an already-present
-package alone. `better-sqlite3` is a native module whose compiled binary is tied to a
-Node major version (`NODE_MODULE_VERSION`), so a cached binary built under an earlier
-Node will survive `npm install` and then fail to load at startup with
-`ERR_DLOPEN_FAILED ... compiled against a different Node.js version`. The build
-succeeds and the process crashes on boot, which is a confusing place to discover it.
-`npm ci` deletes `node_modules` outright and installs from the lockfile, so a stale
-native binary cannot persist across a Node version change.
+**`npm ci` rather than `npm install`**; this one is not stylistic. Render
+restores a cached `node_modules` between deploys, and `npm install` leaves an
+already-present package alone. `better-sqlite3` is a native module whose
+compiled binary is tied to a Node major version (`NODE_MODULE_VERSION`), so a
+cached binary built under an earlier Node will survive `npm install` and then
+fail to load at startup with `ERR_DLOPEN_FAILED ... compiled against a
+different Node.js version`. The build succeeds and the process crashes on
+boot, which is a confusing place to discover it. `npm ci` deletes
+`node_modules` outright and installs from the lockfile, so a stale native
+binary cannot persist across a Node version change.
 
-**`npm prune --omit=dev`** — because build and runtime share a filesystem here,
-installing dev dependencies would otherwise leave `typescript`, `vitest` and every
-`@types` package in the running container. Pruning after the build removes them once
-`dist/` exists: 152 packages ship instead of 202. Dev dependencies live only as long
-as compilation.
+**`npm prune --omit=dev`**, because build and runtime share a filesystem here,
+installing dev dependencies would otherwise leave `typescript`, `vitest` and
+every `@types` package in the running container. Pruning after the build
+removes them once `dist/` exists: 152 packages ship instead of 202. Dev
+dependencies live only as long as compilation.
 
 Dropping `NODE_ENV=production` instead of adding these flags also produces a working
 build, but it is the wrong trade: the variable is what keeps `pino-pretty` (a
@@ -238,14 +239,14 @@ Tweak `WORKER_CONCURRENCY` in `.env`:
    `render deploys create srv-d9r78q0n74is73e77sag --commit <sha>`.
 2. **Revert the commit.** `git revert -m 1 <merge-sha>` on `main`, push, and let
    auto-deploy carry it. Slower, but it keeps `main` and production identical.
-3. **Last resort — disable the demo link** on `slakedesign.com/demo`.
+3. **Last resort, disable the demo link** on `slakedesign.com/demo`.
 
 A failed build is self-rollbacking: Render keeps the previous version live and
 never routes traffic to a build that did not start.
 
 Render runs the old and new instances briefly during a swap, so a request may
-still be answered by the previous version for roughly 30 seconds after a deploy
-reports `live`. Verify with a signal only the new build emits — the
+still be answered by the previous version for roughly 30 seconds after a
+deploy reports `live`. Verify with a signal only the new build emits, the
 `x-correlation-id` response header served that purpose during the 2026-08-28
 rollout.
 
