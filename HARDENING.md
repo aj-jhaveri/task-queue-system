@@ -52,7 +52,7 @@ response shape would have passed while deliveries were still being dropped.
 **What it taught me:** the audit I was working from called this "low probability,
 because BullMQ job IDs are prefixed." That inverts the mechanism. Prefixing was
 the enabling condition, not the mitigation. A plausible-sounding reason to
-deprioritise a bug is worth checking as carefully as the bug.
+deprioritize a bug is worth checking as carefully as the bug.
 
 ---
 
@@ -81,7 +81,7 @@ The queue logged `jobId`, but nothing connected a job to the HTTP request that
 created it. Given a DLQ entry there was no way back to the intake call; given a
 user's bug report, no way forward to the job.
 
-`x-correlation-id` is now accepted at intake (sanitised: 64-character cap,
+`x-correlation-id` is now accepted at intake (sanitized: 64-character cap,
 `[A-Za-z0-9_-]` only, discarded rather than repaired if it survives nothing),
 generated when absent, echoed on the response and in the 202 body, carried on
 the job payload across the process boundary, and re-entered in **both** the

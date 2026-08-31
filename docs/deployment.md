@@ -250,7 +250,7 @@ deploy reports `live`. Verify with a signal only the new build emits, the
 `x-correlation-id` response header served that purpose during the 2026-08-28
 rollout.
 
-## Behavioural changes deployed 2026-08-28
+## Behavioral changes deployed 2026-08-28
 
 - **Idempotency is scoped to `(job_name, key)`.** A client that relied on one key
   suppressing a second job of a *different* type will now see both run. That
