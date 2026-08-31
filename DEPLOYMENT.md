@@ -16,5 +16,5 @@ it in every one of these repos.
 | Consumed by | `slakedesign.com/demo/queue` via `netlify/functions/queue-demo.js` |
 | Redis | Upstash, see the command-budget notes in `docs/design_decisions.md` before changing worker tuning |
 
-Environment variables, rollback steps, behavioural changes and the post-deploy
+Environment variables, rollback steps, behavioral changes and the post-deploy
 smoke test are all in [docs/deployment.md](docs/deployment.md).

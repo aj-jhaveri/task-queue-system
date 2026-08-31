@@ -312,7 +312,7 @@ with mocks.
   reintroduced a runtime failure switch, merely behind a credential.
 - **No caller-supplied webhook URL.** The `WEBHOOK_DELIVERY` job takes a destination
   *name* from an enum, not a URL. On an unauthenticated endpoint a URL field would
-  be an SSRF primitive pointed at cloud metadata or internal services. The defence
+  be an SSRF primitive pointed at cloud metadata or internal services. The defense
   is that no URL-shaped input exists, rather than that one is validated.
 - **No client-side polling of job status in the demo page.** It would have made the
   page's pipeline tracker fully live, but at a per-dispatch Redis cost on an

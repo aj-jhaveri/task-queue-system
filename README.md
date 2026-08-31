@@ -306,7 +306,7 @@ public dashboard.
 it to an address internally, so there is no input that can point this job at
 metadata endpoints, internal hosts, or third parties.
 
-| Destination | Behaviour |
+| Destination | Behavior |
 |---|---|
 | `DEMO_AVAILABLE` | Delivers to a loopback sink that returns `200`. Job succeeds |
 | `DEMO_UNAVAILABLE` | Target path is not served. Job fails for real, retries 3×, then lands in the DLQ |
@@ -419,8 +419,8 @@ and read-only.
 **What was fixed, and what it taught me.** See [HARDENING.md](HARDENING.md).
 The headline defect was an idempotency key scoped to `key` alone rather than
 `(job_name, key)`, which caused webhook deliveries to be silently dropped and
-reported as successes. The lesson that generalised: I had a plausible-sounding
-reason to deprioritise it ("BullMQ job IDs are prefixed, so collisions are
+reported as successes. The lesson that generalized: I had a plausible-sounding
+reason to deprioritize it ("BullMQ job IDs are prefixed, so collisions are
 unlikely"), and that reasoning was exactly backwards. The prefix was the
 enabling condition. A convincing argument for not fixing something deserves
 the same scrutiny as the bug.

@@ -11,8 +11,8 @@ npm run typecheck && npm test && npm run build
 
 Requires Docker Redis: `docker compose up -d redis`.
 
-Passing this suite is necessary, not sufficient. Report what you actually checked,
-not the test count — see `~/.claude/CLAUDE.md` §1–2.
+Passing this suite is necessary, not sufficient. Report what was actually checked,
+not the test count.
 
 **Node version:** `better-sqlite3` is a native module pinned to a Node major. If
 tests fail with `NODE_MODULE_VERSION`, the shell's Node has drifted — run
